@@ -74,18 +74,62 @@ public final class PlaylistParser {
     }
 
     private static boolean isStreamUrl(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return false;
+        }
         String lower = value.toLowerCase();
         return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("rtmp://");
     }
 
     private static List<Channel> parseJson(String text) throws JSONException {
         List<Channel> channels = new ArrayList<>();
+        if (text.startsWith("{")) {
+            JSONObject root = new JSONObject(text);
+            JSONArray groups = root.optJSONArray("groups");
+            if (groups != null) {
+                parseW3uGroups(groups, channels);
+                if (channels.isEmpty()) {
+                    throw new IllegalArgumentException("El archivo W3U no contiene estaciones válidas");
+                }
+                return channels;
+            }
+        }
+
         Object root = text.startsWith("[") ? new JSONArray(text) : new JSONObject(text);
         collectJsonChannels(root, channels);
         if (channels.isEmpty()) {
             throw new IllegalArgumentException("El JSON no contiene canales con nombre y URL");
         }
         return channels;
+    }
+
+    private static void parseW3uGroups(JSONArray groups, List<Channel> channels) throws JSONException {
+        for (int i = 0; i < groups.length(); i++) {
+            JSONObject group = groups.optJSONObject(i);
+            if (group == null) {
+                continue;
+            }
+            String groupName = firstString(group, "name", "title", "group", "category");
+            JSONArray stations = group.optJSONArray("stations");
+            if (stations == null) {
+                stations = group.optJSONArray("channels");
+            }
+            if (stations == null) {
+                continue;
+            }
+            for (int j = 0; j < stations.length(); j++) {
+                JSONObject station = stations.optJSONObject(j);
+                if (station == null) {
+                    continue;
+                }
+                String url = firstString(station, "url", "stream_url", "streamUrl", "link", "src", "file", "url2", "url3");
+                if (!isStreamUrl(url)) {
+                    continue;
+                }
+                String name = firstString(station, "name", "title", "channel", "channel_name", "label");
+                channels.add(new Channel(name == null ? url : name, url, groupName));
+            }
+        }
     }
 
     private static void collectJsonChannels(Object value, List<Channel> channels) throws JSONException {

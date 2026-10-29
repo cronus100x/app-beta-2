@@ -2,9 +2,12 @@ package com.wiseplay.player;
 
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.common.MediaItem;
+import android.widget.Toast;
 
 public class PlayerActivity extends AppCompatActivity {
 
@@ -26,6 +29,14 @@ public class PlayerActivity extends AppCompatActivity {
         if (urlVideo != null && !urlVideo.isEmpty()) {
             player = new ExoPlayer.Builder(this).build();
             playerView.setPlayer(player);
+            player.addListener(new Player.Listener() {
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    Toast.makeText(PlayerActivity.this,
+                            "No se puede reproducir este canal: " + error.getErrorCodeName(),
+                            Toast.LENGTH_LONG).show();
+                }
+            });
             
             MediaItem mediaItem = MediaItem.fromUri(urlVideo);
             player.setMediaItem(mediaItem);
