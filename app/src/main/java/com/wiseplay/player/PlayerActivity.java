@@ -18,6 +18,10 @@ public class PlayerActivity extends AppCompatActivity {
 
         playerView = findViewById(R.id.playerView);
         String urlVideo = getIntent().getStringExtra("url_video");
+        String channelName = getIntent().getStringExtra("channel_name");
+        if (channelName != null && !channelName.isEmpty()) {
+            setTitle(channelName);
+        }
 
         if (urlVideo != null && !urlVideo.isEmpty()) {
             player = new ExoPlayer.Builder(this).build();

@@ -8,6 +8,7 @@
         android:allowBackup="true"
         android:label="Wiseplay Player"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.AppCompat.NoActionBar">
         
         <activity
