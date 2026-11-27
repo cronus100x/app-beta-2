@@ -21,6 +21,10 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManager;
+import androidx.media3.exoplayer.drm.DrmSessionManager;
+import androidx.media3.exoplayer.drm.FrameworkMediaDrm;
+import androidx.media3.exoplayer.drm.LocalMediaDrmCallback;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
@@ -29,6 +33,7 @@ import androidx.media3.ui.TrackSelectionDialogBuilder;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
 
 @UnstableApi
 public class PlayerActivity extends AppCompatActivity {
@@ -57,7 +62,10 @@ public class PlayerActivity extends AppCompatActivity {
         String userAgent = getIntent().getStringExtra("channel_user_agent");
         String referer = getIntent().getStringExtra("channel_referer");
         boolean isHost = getIntent().getBooleanExtra("channel_host", false);
-        channel = new Channel(name, url, group, image, userAgent, referer, isHost, readHeaders());
+        String licenseType = getIntent().getStringExtra("channel_license_type");
+        String licenseKey = getIntent().getStringExtra("channel_license_key");
+        channel = new Channel(name, url, group, image, userAgent, referer, isHost,
+                licenseType, licenseKey, readHeaders());
         setTitle(channel.getName());
         ((TextView) findViewById(R.id.titleText)).setText(channel.getName());
 
@@ -107,10 +115,24 @@ public class PlayerActivity extends AppCompatActivity {
                 .setBufferDurationsMs(15_000, 50_000, 2_500, 5_000)
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .build();
+        androidx.media3.exoplayer.source.DefaultMediaSourceFactory mediaSourceFactory =
+                new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory);
+        if ("clearkey".equalsIgnoreCase(channel.getLicenseType())
+                && !channel.getLicenseKey().isEmpty()) {
+            try {
+                DrmSessionManager drmSessionManager = new DefaultDrmSessionManager.Builder()
+                        .setUuidAndExoMediaDrmProvider(C.CLEARKEY_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
+                        .build(new LocalMediaDrmCallback(
+                                channel.getLicenseKey().getBytes(StandardCharsets.UTF_8)));
+                mediaSourceFactory.setDrmSessionManagerProvider(mediaItem -> drmSessionManager);
+            } catch (RuntimeException drmError) {
+                showError("No se pudo inicializar ClearKey: " + drmError.getMessage());
+            }
+        }
         player = new ExoPlayer.Builder(this)
                 .setTrackSelector(trackSelector)
                 .setLoadControl(loadControl)
-                .setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(httpFactory))
+                .setMediaSourceFactory(mediaSourceFactory)
                 .build();
         playerView.setPlayer(player);
         playerView.setKeepScreenOn(true);
@@ -136,7 +158,13 @@ public class PlayerActivity extends AppCompatActivity {
                 }
             }
         });
-        player.setMediaItem(MediaItem.fromUri(playbackUrl));
+        MediaItem.Builder mediaItemBuilder = new MediaItem.Builder().setUri(playbackUrl);
+        if ("clearkey".equalsIgnoreCase(channel.getLicenseType())
+                && !channel.getLicenseKey().isEmpty()) {
+            mediaItemBuilder.setDrmConfiguration(
+                    new MediaItem.DrmConfiguration.Builder(C.CLEARKEY_UUID).build());
+        }
+        player.setMediaItem(mediaItemBuilder.build());
         player.prepare();
         player.play();
     }

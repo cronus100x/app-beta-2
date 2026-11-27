@@ -12,14 +12,17 @@ public class Channel {
     private final String userAgent;
     private final String referer;
     private final boolean host;
+    private final String licenseType;
+    private final String licenseKey;
     private final Map<String, String> headers;
 
     public Channel(String name, String url, String group) {
-        this(name, url, group, "", "", "", false, Collections.emptyMap());
+        this(name, url, group, "", "", "", false, "", "", Collections.emptyMap());
     }
 
     public Channel(String name, String url, String group, String image, String userAgent,
-                   String referer, boolean host, Map<String, String> headers) {
+                   String referer, boolean host, String licenseType, String licenseKey,
+                   Map<String, String> headers) {
         this.name = name == null || name.trim().isEmpty() ? "Canal sin nombre" : name.trim();
         this.url = url == null ? "" : url.trim();
         this.group = group == null ? "" : group.trim();
@@ -27,6 +30,8 @@ public class Channel {
         this.userAgent = userAgent == null ? "" : userAgent.trim();
         this.referer = referer == null ? "" : referer.trim();
         this.host = host;
+        this.licenseType = licenseType == null ? "" : licenseType.trim();
+        this.licenseKey = licenseKey == null ? "" : licenseKey.trim();
         this.headers = headers == null
                 ? Collections.emptyMap()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(headers));
@@ -48,6 +53,8 @@ public class Channel {
     public String getUserAgent() { return userAgent; }
     public String getReferer() { return referer; }
     public boolean isHost() { return host; }
+    public String getLicenseType() { return licenseType; }
+    public String getLicenseKey() { return licenseKey; }
     public Map<String, String> getHeaders() { return headers; }
 
     public String getDisplayName() {

@@ -235,6 +235,8 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("channel_user_agent", channel.getUserAgent());
         intent.putExtra("channel_referer", channel.getReferer());
         intent.putExtra("channel_host", channel.isHost());
+        intent.putExtra("channel_license_type", channel.getLicenseType());
+        intent.putExtra("channel_license_key", channel.getLicenseKey());
         StringBuilder headers = new StringBuilder();
         for (java.util.Map.Entry<String, String> entry : channel.getHeaders().entrySet()) {
             headers.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");

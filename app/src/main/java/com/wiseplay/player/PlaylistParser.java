@@ -37,7 +37,7 @@ public final class PlaylistParser {
                 referer = attribute(attributes, "referrer");
             } else if (!line.startsWith("#") && isStreamUrl(line)) {
                 channels.add(new Channel(name == null || name.isEmpty() ? line : name, line, group,
-                        image, userAgent, referer, false, new LinkedHashMap<>()));
+                        image, userAgent, referer, false, "", "", new LinkedHashMap<>()));
                 name = null; group = ""; image = ""; userAgent = ""; referer = "";
             }
         }
@@ -136,7 +136,9 @@ public final class PlaylistParser {
             while (keys.hasNext()) { String key = keys.next(); headers.put(key, headerObject.optString(key, "")); }
         }
         channels.add(new Channel(name.isEmpty() ? url : name, url, stationGroup, image,
-                userAgent, referer, station.optBoolean("isHost", false), headers));
+                userAgent, referer, station.optBoolean("isHost", false),
+                firstString(station, "license_type", "licenseType", "drm_type"),
+                firstString(station, "license_key", "licenseKey", "drm_key"), headers));
     }
 
     private static List<Channel> deduplicate(List<Channel> input) {
