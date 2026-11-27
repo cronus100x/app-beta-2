@@ -4,6 +4,8 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -31,12 +33,14 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     private final List<Channel> channels = new ArrayList<>();
+    private final List<Channel> visibleChannels = new ArrayList<>();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private EditText urlInput;
     private TextView statusText;
     private ProgressBar progressBar;
     private ArrayAdapter<String> channelAdapter;
     private ActivityResultLauncher<String[]> filePicker;
+    private String lastRemoteUrl = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,12 +77,36 @@ public class MainActivity extends AppCompatActivity {
         urlButton.setOnClickListener(view -> loadFromUrl());
         actions.addView(urlButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
+        Button refreshButton = new Button(this);
+        refreshButton.setText("Actualizar");
+        refreshButton.setOnClickListener(view -> {
+            if (lastRemoteUrl.isEmpty()) {
+                Toast.makeText(this, "Carga primero una playlist remota", Toast.LENGTH_SHORT).show();
+            } else {
+                urlInput.setText(lastRemoteUrl);
+                loadFromUrl();
+            }
+        });
+        actions.addView(refreshButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
         Button fileButton = new Button(this);
         fileButton.setText("Abrir archivo");
         fileButton.setOnClickListener(view -> filePicker.launch(new String[]{
                 "text/*", "application/json", "application/octet-stream", "*/*"}));
         actions.addView(fileButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         root.addView(actions);
+
+        EditText searchInput = new EditText(this);
+        searchInput.setHint("Buscar canal o grupo");
+        searchInput.setSingleLine(true);
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                filterChannels(s.toString());
+            }
+            @Override public void afterTextChanged(Editable s) { }
+        });
+        root.addView(searchInput);
 
         progressBar = new ProgressBar(this);
         progressBar.setVisibility(View.GONE);
@@ -92,7 +120,7 @@ public class MainActivity extends AppCompatActivity {
         ListView channelList = new ListView(this);
         channelAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
         channelList.setAdapter(channelAdapter);
-        channelList.setOnItemClickListener((parent, view, position, id) -> openChannel(channels.get(position)));
+        channelList.setOnItemClickListener((parent, view, position, id) -> openChannel(visibleChannels.get(position)));
         root.addView(channelList, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
 
@@ -106,6 +134,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         setLoading(true);
+        lastRemoteUrl = url;
         executor.execute(() -> {
             try {
                 HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
@@ -159,12 +188,29 @@ public class MainActivity extends AppCompatActivity {
         setLoading(false);
         channels.clear();
         channels.addAll(parsed);
+        visibleChannels.clear();
+        visibleChannels.addAll(parsed);
         channelAdapter.clear();
         for (Channel channel : channels) {
             channelAdapter.add(channel.getDisplayName());
         }
         channelAdapter.notifyDataSetChanged();
         statusText.setText("Playlist cargada desde " + source + ": " + channels.size() + " canales");
+    }
+
+    private void filterChannels(String query) {
+        String normalized = query == null ? "" : query.trim().toLowerCase();
+        visibleChannels.clear();
+        for (Channel channel : channels) {
+            if (normalized.isEmpty()
+                    || channel.getName().toLowerCase().contains(normalized)
+                    || channel.getGroup().toLowerCase().contains(normalized)) {
+                visibleChannels.add(channel);
+            }
+        }
+        channelAdapter.clear();
+        for (Channel channel : visibleChannels) channelAdapter.add(channel.getDisplayName());
+        channelAdapter.notifyDataSetChanged();
     }
 
     private void showError(Exception exception) {
@@ -184,6 +230,16 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(this, PlayerActivity.class);
         intent.putExtra("url_video", channel.getUrl());
         intent.putExtra("channel_name", channel.getName());
+        intent.putExtra("channel_group", channel.getGroup());
+        intent.putExtra("channel_image", channel.getImage());
+        intent.putExtra("channel_user_agent", channel.getUserAgent());
+        intent.putExtra("channel_referer", channel.getReferer());
+        intent.putExtra("channel_host", channel.isHost());
+        StringBuilder headers = new StringBuilder();
+        for (java.util.Map.Entry<String, String> entry : channel.getHeaders().entrySet()) {
+            headers.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
+        }
+        intent.putExtra("channel_headers", headers.toString());
         startActivity(intent);
     }
 
