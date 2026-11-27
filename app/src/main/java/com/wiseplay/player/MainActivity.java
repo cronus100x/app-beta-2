@@ -17,7 +17,6 @@ import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -65,13 +64,11 @@ public class MainActivity extends AppCompatActivity {
     private EditText urlInput, searchInput;
     private TextView statusText;
     private ProgressBar progressBar;
-    private LinearLayout channelGrid, categoryBar, settingsPanel;
+    private LinearLayout channelGrid, settingsPanel;
     private Spinner savedUrlSpinner;
     private ArrayAdapter<String> savedUrlAdapter;
     private String lastRemoteUrl = "";
-    private String selectedCategory = "Todos";
     private boolean favoriteOnly;
-    private boolean recentOnly;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -112,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         settingsPanel = panel(); settingsPanel.setPadding(dp(10), dp(8), dp(10), dp(8)); settingsPanel.setVisibility(View.GONE); root.addView(settingsPanel, wrap()); buildSettings();
         ScrollView scroll = new ScrollView(this); channelGrid = new LinearLayout(this); channelGrid.setOrientation(LinearLayout.VERTICAL); channelGrid.setPadding(dp(6), dp(6), dp(6), dp(24)); scroll.addView(channelGrid); root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        favoritesButton.setOnClickListener(v -> { favoriteOnly = !favoriteOnly; recentOnly = false; selectedCategory = favoriteOnly ? "Favoritos" : "Todos"; favoritesButton.setText(favoriteOnly ? "★" : "☆"); filterChannels(searchInput.getText().toString()); });
+        favoritesButton.setOnClickListener(v -> { favoriteOnly = !favoriteOnly; favoritesButton.setText(favoriteOnly ? "★" : "☆"); filterChannels(searchInput.getText().toString()); });
         edit.setOnClickListener(v -> settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
         search.setOnClickListener(v -> { searchInput.setVisibility(searchInput.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); if (searchInput.getVisibility() == View.VISIBLE) searchInput.requestFocus(); });
         refresh.setOnClickListener(v -> { if (lastRemoteUrl.isEmpty()) toast("Carga primero una playlist remota"); else { urlInput.setText(lastRemoteUrl); loadFromUrl(); }});
@@ -134,22 +131,14 @@ public class MainActivity extends AppCompatActivity {
         Button del = action("Eliminar"); del.setOnClickListener(v -> deleteSelectedUrl()); saved.addView(del, new LinearLayout.LayoutParams(dp(110), dp(44)));
     }
 
-    private void rebuildCategories() {
-        if (categoryBar == null) return;
-        categoryBar.removeAllViews();
-        addCategory("★ Favoritos  (" + favorites.size() + ")", favorites.size() > 0, true);
-        addCategory("▶ Recientes  (" + recentUrls().size() + ")", !recentUrls().isEmpty(), false);
-        addCategory("▦ Ver todos  (" + channels.size() + ")", true, false);
-        Set<String> groups = new LinkedHashSet<>(); for (Channel c : channels) if (!c.getGroup().isEmpty()) groups.add(c.getGroup());
-        for (String g : groups) { int count = 0; for (Channel c : channels) if (g.equals(c.getGroup())) count++; addCategory("• " + g + "  (" + count + ")", true, false); }
-    }
-    private void addCategory(String text, boolean enabled, boolean fav) { String display = text; if (text.startsWith("• ")) { String name = text.substring(2); display = categoryIcon(name) + "  " + name + "  ›"; } Button b = action(display); b.setGravity(Gravity.START|Gravity.CENTER_VERTICAL); b.setTextSize(13); b.setEnabled(enabled); b.setOnClickListener(v -> { favoriteOnly=fav; recentOnly=text.startsWith("▶"); selectedCategory=fav?"Favoritos":text; filterChannels(searchInput.getText().toString()); }); categoryBar.addView(b, new LinearLayout.LayoutParams(-1, dp(44))); }
-    private String categoryIcon(String name) { String n = name.toUpperCase(); if (n.contains("DEPORTE") || n.contains("ESPN") || n.contains("FÚTBOL") || n.contains("FUTBOL") || n.contains("EVENTO")) return "🏆"; if (n.contains("NOTIC")) return "▣"; if (n.contains("CINE") || n.contains("PELÍC") || n.contains("PELIC")) return "▤"; if (n.contains("INFANT")) return "★"; if (n.contains("CULTURA")) return "◆"; if (n.contains("MÚSICA") || n.contains("MUSICA")) return "♫"; return "▦"; }
-
     private void filterChannels(String query) {
-        String q = query == null ? "" : query.trim().toLowerCase(); visibleChannels.clear();
-        List<String> recents = recentUrls();
-        for (Channel c : channels) { boolean cat; if (favoriteOnly) cat = favorites.contains(c.getUrl()); else if (recentOnly) cat = recents.contains(c.getUrl()); else { String selectedGroup = selectedCategory.startsWith("• ") ? selectedCategory.substring(2, selectedCategory.indexOf("  (") >= 0 ? selectedCategory.indexOf("  (") : selectedCategory.length()) : ""; cat = selectedCategory.equals("Todos") || selectedCategory.startsWith("▦") || selectedCategory.equals("Ver todos") || (selectedCategory.startsWith("• ") && selectedGroup.equals(c.getGroup())); } boolean text = q.isEmpty() || c.getName().toLowerCase().contains(q) || c.getGroup().toLowerCase().contains(q); if(cat&&text) visibleChannels.add(c); }
+        String q = query == null ? "" : query.trim().toLowerCase();
+        visibleChannels.clear();
+        for (Channel c : channels) {
+            boolean matchesFavorite = !favoriteOnly || favorites.contains(c.getUrl());
+            boolean matchesText = q.isEmpty() || c.getName().toLowerCase().contains(q) || c.getGroup().toLowerCase().contains(q);
+            if (matchesFavorite && matchesText) visibleChannels.add(c);
+        }
         renderChannels();
     }
     private void renderChannels() {
@@ -187,15 +176,13 @@ public class MainActivity extends AppCompatActivity {
     private void loadFromUrl(){ String u=urlInput.getText().toString().trim(); if(!u.startsWith("http://")&&!u.startsWith("https://")){urlInput.setError("Introduce una URL válida");return;} lastRemoteUrl=u; setLoading(true); executor.execute(()->{try{HttpURLConnection con=(HttpURLConnection)new URL(u).openConnection();con.setConnectTimeout(15000);con.setReadTimeout(30000);con.setRequestProperty("User-Agent","WiseplayPlayer/1.0");try(InputStream in=con.getInputStream()){List<Channel> p=PlaylistParser.parse(readText(in));runOnUiThread(()->showChannels(p,"URL"));}finally{con.disconnect();}}catch(Exception e){showError(e);}}); }
     private void onFileSelected(Uri uri){if(uri==null)return;setLoading(true);executor.execute(()->{try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IllegalArgumentException("No se pudo abrir el archivo");List<Channel> p=PlaylistParser.parse(readText(in));runOnUiThread(()->showChannels(p,"archivo"));}catch(Exception e){showError(e);}});}
     private String readText(InputStream in)throws Exception{StringBuilder s=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)s.append(l).append('\n');}return s.toString();}
-    private void showChannels(List<Channel> p,String source){setLoading(false);channels.clear();channels.addAll(p);saveCachedChannels();lastRemoteUrl=urlInput.getText().toString().trim();selectedCategory="Todos";favoriteOnly=false;recentOnly=false;rebuildCategories();filterChannels("");statusText.setText("Playlist cargada desde "+source+": "+channels.size()+" canales");}
-    private void toggleFavorite(Channel c){if(!favorites.add(c.getUrl()))favorites.remove(c.getUrl());preferences.edit().putString("favorites_json",new Gson().toJson(new ArrayList<>(favorites))).putStringSet("favorites",new HashSet<>(favorites)).apply();rebuildCategories();filterChannels(searchInput.getText().toString());toast(favorites.contains(c.getUrl())?"Añadido a favoritos":"Quitado de favoritos");}
+    private void showChannels(List<Channel> p,String source){setLoading(false);channels.clear();channels.addAll(p);saveCachedChannels();lastRemoteUrl=urlInput.getText().toString().trim();favoriteOnly=false;filterChannels("");statusText.setText("Playlist cargada desde "+source+": "+channels.size()+" canales");}
+    private void toggleFavorite(Channel c){if(!favorites.add(c.getUrl()))favorites.remove(c.getUrl());preferences.edit().putString("favorites_json",new Gson().toJson(new ArrayList<>(favorites))).putStringSet("favorites",new HashSet<>(favorites)).apply();filterChannels(searchInput.getText().toString());toast(favorites.contains(c.getUrl())?"Añadido a favoritos":"Quitado de favoritos");}
     private void saveCachedChannels(){ preferences.edit().putString("cached_channels",new Gson().toJson(channels)).putLong("cached_at",System.currentTimeMillis()).apply(); }
     private void restoreCachedChannels(){
         String raw=preferences.getString("cached_channels",""); if(raw.isEmpty()) return;
-        try { List<Channel> cached=new Gson().fromJson(raw,new TypeToken<List<Channel>>(){}.getType()); if(cached==null||cached.isEmpty()) return; channels.clear(); channels.addAll(cached); rebuildCategories(); filterChannels(""); long at=preferences.getLong("cached_at",0); statusText.setText("Canales guardados"+(at>0?" · lista local disponible":"")); } catch(Exception ignored) { }
+        try { List<Channel> cached=new Gson().fromJson(raw,new TypeToken<List<Channel>>(){}.getType()); if(cached==null||cached.isEmpty()) return; channels.clear(); channels.addAll(cached); filterChannels(""); long at=preferences.getLong("cached_at",0); statusText.setText("Canales guardados"+(at>0?" · lista local disponible":"")); } catch(Exception ignored) { }
     }
-    private List<String> recentUrls(){ String raw=preferences.getString("recent_channels","[]"); try { List<String> list=new Gson().fromJson(raw,new TypeToken<List<String>>(){}.getType()); return list==null?new ArrayList<>():list; } catch(Exception e){ return new ArrayList<>(); } }
-    private void rememberRecent(Channel c){ List<String> list=recentUrls(); list.remove(c.getUrl()); list.add(0,c.getUrl()); if(list.size()>10) list=new ArrayList<>(list.subList(0,10)); preferences.edit().putString("recent_channels",new Gson().toJson(list)).apply(); rebuildCategories(); }
     private void saveCurrentUrl(){String u=urlInput.getText().toString().trim();if(!u.startsWith("http://")&&!u.startsWith("https://")){urlInput.setError("Introduce una URL válida");return;}Set<String>s=new LinkedHashSet<>(preferences.getStringSet("playlist_urls",Collections.emptySet()));s.add(u);preferences.edit().putStringSet("playlist_urls",s).apply();refreshSavedUrls();toast("URL guardada");}
     private void deleteSelectedUrl(){if(savedUrlAdapter==null||savedUrlAdapter.getCount()==0)return;String u=savedUrlAdapter.getItem(savedUrlSpinner.getSelectedItemPosition());Set<String>s=new LinkedHashSet<>(preferences.getStringSet("playlist_urls",Collections.emptySet()));s.remove(u);preferences.edit().putStringSet("playlist_urls",s).apply();refreshSavedUrls();toast("URL eliminada");}
     private void refreshSavedUrls(){if(savedUrlAdapter==null)return;savedUrlAdapter.clear();savedUrlAdapter.addAll(new ArrayList<>(preferences.getStringSet("playlist_urls",Collections.emptySet())));savedUrlAdapter.notifyDataSetChanged();}
