@@ -165,7 +165,12 @@ public class PlayerActivity extends AppCompatActivity {
         trackSelector = new DefaultTrackSelector(this);
         DefaultTrackSelector.Parameters.Builder trackParameters = trackSelector.buildUponParameters()
                 .setPreferredAudioLanguages("es", "spa");
-        if (dataSaver) trackParameters.setMaxVideoSizeSd().setMaxVideoBitrate(800_000);
+        if (dataSaver) {
+            // No basta con limitar el bitrate: algunas listas tienen 240p y 360p
+            // con bitrates parecidos. Esta opción obliga a escoger la variante
+            // de menor bitrate/resolución que el manifiesto realmente ofrece.
+            trackParameters.setForceLowestBitrate(true);
+        }
         trackSelector.setParameters(trackParameters);
 
         String token = tokenManager.getValidToken();
