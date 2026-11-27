@@ -49,12 +49,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
-    private static final int BG = Color.rgb(11, 16, 32);
-    private static final int SURFACE = Color.rgb(21, 29, 51);
-    private static final int SURFACE_ALT = Color.rgb(28, 39, 66);
-    private static final int ACCENT = Color.rgb(91, 140, 255);
-    private static final int MUTED = Color.rgb(155, 168, 199);
-    private static final int PRIMARY = Color.rgb(245, 247, 255);
+    private static final int BG = Color.rgb(7, 7, 8);
+    private static final int SURFACE = Color.rgb(20, 20, 22);
+    private static final int SURFACE_ALT = Color.rgb(38, 38, 42);
+    private static final int ACCENT = Color.rgb(225, 24, 34);
+    private static final int MUTED = Color.rgb(165, 165, 170);
+    private static final int PRIMARY = Color.rgb(248, 248, 248);
 
     private final List<Channel> channels = new ArrayList<>();
     private final List<Channel> visibleChannels = new ArrayList<>();
@@ -97,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(8), 0, 0, 0); main.addView(content, new LinearLayout.LayoutParams(0, -1, 1));
         LinearLayout header = new LinearLayout(this); header.setGravity(Gravity.CENTER_VERTICAL); content.addView(header, wrap());
         LinearLayout titleBox = new LinearLayout(this); titleBox.setOrientation(LinearLayout.VERTICAL); header.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView title = label("Wiseplay Player", 22, PRIMARY); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD); titleBox.addView(title);
+        TextView title = label("Wis TV", 22, PRIMARY); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD); titleBox.addView(title);
         statusText = label("Carga una playlist para comenzar", 12, MUTED); titleBox.addView(statusText);
         progressBar = new ProgressBar(this); progressBar.setVisibility(View.GONE); header.addView(progressBar, new LinearLayout.LayoutParams(dp(28), dp(28)));
 
@@ -200,8 +200,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView label(String s,float size,int color){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);return v;}
     private EditText edit(String hint){EditText e=new EditText(this);e.setHint(hint);e.setHintTextColor(MUTED);e.setTextColor(PRIMARY);e.setSingleLine(true);e.setInputType(InputType.TYPE_CLASS_TEXT);e.setPadding(dp(14),0,dp(14),0);e.setBackground(round(SURFACE,12,0,0));return e;}
     private Button action(String text){Button b=new Button(this);b.setText(text);b.setTextColor(PRIMARY);b.setTextSize(12);b.setAllCaps(false);b.setMinWidth(0);b.setPadding(dp(8),0,dp(8),0);b.setBackground(round(SURFACE_ALT,12,ACCENT,1));return b;}
-    private LinearLayout panel(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setBackground(round(SURFACE,12,Color.rgb(38,52,85),1));return l;}
-    private GradientDrawable cardBackground(){return round(SURFACE,12,Color.rgb(38,52,85),1);}
+    private LinearLayout panel(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setBackground(round(SURFACE,12,Color.rgb(65,65,70),1));return l;}
+    private GradientDrawable cardBackground(){return round(SURFACE,12,Color.rgb(65,65,70),1);}
     private GradientDrawable round(int color,int radius,int stroke,int width){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));if(width>0)d.setStroke(dp(width),stroke);return d;}
     private LinearLayout.LayoutParams wrap(){return new LinearLayout.LayoutParams(-1,-2);}
     private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}

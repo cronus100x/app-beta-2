@@ -27,7 +27,7 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:padding="8dp"
-            android:background="#990B1020">
+            android:background="#CC080809">
             <Button
                 android:id="@+id/backButton"
                 android:layout_width="52dp"
@@ -52,7 +52,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:padding="8dp"
-                android:textColor="#BFD0FF"
+                android:textColor="#FF7777"
                 android:textSize="12sp"
                 android:text="Calidad automática" />
         </LinearLayout>
@@ -63,7 +63,7 @@
             android:layout_height="wrap_content"
             android:layout_margin="24dp"
             android:padding="16dp"
-            android:background="#DD202A43"
+            android:background="#DD260F12"
             android:gravity="center"
             android:textColor="#FFFFFF"
             android:textSize="16sp"
@@ -74,7 +74,7 @@
             android:orientation="horizontal"
             android:gravity="center"
             android:padding="6dp"
-            android:background="#990B1020">
+            android:background="#CC080809">
             <Button android:id="@+id/previousButton" android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:minWidth="0dp" android:text="‹ Anterior" android:textSize="12sp" android:textColor="#FFFFFF" />
             <Button android:id="@+id/nextButton" android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:minWidth="0dp" android:text="Siguiente ›" android:textSize="12sp" android:textColor="#FFFFFF" />
             <Button android:id="@+id/saverButton" android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:minWidth="0dp" android:text="Ahorro: no" android:textSize="12sp" android:textColor="#FFFFFF" />
