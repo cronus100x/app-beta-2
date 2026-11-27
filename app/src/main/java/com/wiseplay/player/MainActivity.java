@@ -32,7 +32,6 @@ import com.google.gson.reflect.TypeToken;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.drawerlayout.widget.DrawerLayout;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -77,7 +76,9 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         preferences = getSharedPreferences("wiseplay_preferences", MODE_PRIVATE);
-        favorites.addAll(preferences.getStringSet("favorites", Collections.emptySet()));
+        String savedFavorites = preferences.getString("favorites_json", "");
+        if (!savedFavorites.isEmpty()) { try { List<String> stored = new Gson().fromJson(savedFavorites, new TypeToken<List<String>>(){}.getType()); if (stored != null) favorites.addAll(stored); } catch (Exception ignored) { } }
+        if (favorites.isEmpty()) favorites.addAll(preferences.getStringSet("favorites", Collections.emptySet()));
         filePicker = registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::onFileSelected);
         buildUi();
         refreshSavedUrls();
@@ -86,21 +87,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void buildUi() {
-        DrawerLayout drawer = new DrawerLayout(this);
-        drawer.setBackgroundColor(BG);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
-        drawer.addView(root, new DrawerLayout.LayoutParams(-1, -1));
 
         LinearLayout toolbar = new LinearLayout(this);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
         toolbar.setPadding(dp(6), 0, dp(6), 0);
         toolbar.setBackgroundColor(ACCENT);
-        Button menu = toolbarButton("☰"); menu.setContentDescription("Explorar categorías");
-        toolbar.addView(menu, new LinearLayout.LayoutParams(dp(48), dp(56)));
         TextView title = label("WIS TV", 20, Color.WHITE); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         toolbar.addView(title, new LinearLayout.LayoutParams(0, dp(56), 1));
+        Button favoritesButton = toolbarButton("☆"); favoritesButton.setContentDescription("Mostrar favoritos"); toolbar.addView(favoritesButton, new LinearLayout.LayoutParams(dp(48), dp(56)));
         Button edit = toolbarButton("✎"); edit.setContentDescription("Gestionar playlists"); toolbar.addView(edit, new LinearLayout.LayoutParams(dp(44), dp(56)));
         Button search = toolbarButton("⌕"); search.setContentDescription("Buscar canales"); toolbar.addView(search, new LinearLayout.LayoutParams(dp(44), dp(56)));
         Button refresh = toolbarButton("⟳"); refresh.setContentDescription("Actualizar canales"); toolbar.addView(refresh, new LinearLayout.LayoutParams(dp(44), dp(56)));
@@ -115,19 +112,12 @@ public class MainActivity extends AppCompatActivity {
         settingsPanel = panel(); settingsPanel.setPadding(dp(10), dp(8), dp(10), dp(8)); settingsPanel.setVisibility(View.GONE); root.addView(settingsPanel, wrap()); buildSettings();
         ScrollView scroll = new ScrollView(this); channelGrid = new LinearLayout(this); channelGrid.setOrientation(LinearLayout.VERTICAL); channelGrid.setPadding(dp(6), dp(6), dp(6), dp(24)); scroll.addView(channelGrid); root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        LinearLayout nav = panel(); nav.setPadding(dp(12), dp(16), dp(12), dp(12));
-        TextView navTitle = label("EXPLORAR", 18, Color.WHITE); navTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD); nav.addView(navTitle, wrap());
-        TextView navHint = label("Canales y categorías", 12, MUTED); nav.addView(navHint, wrap());
-        Button all = action("▶  TODOS LOS CANALES"); all.setTextColor(Color.WHITE); all.setGravity(Gravity.START|Gravity.CENTER_VERTICAL); all.setBackground(round(Color.rgb(235,112,20),12,Color.rgb(255,180,80),1)); all.setOnClickListener(v -> { favoriteOnly=false; recentOnly=false; selectedCategory="Todos"; filterChannels(searchInput.getText().toString()); drawer.closeDrawers(); }); nav.addView(all, new LinearLayout.LayoutParams(-1, dp(48)));
-        ScrollView navScroll = new ScrollView(this); categoryBar = new LinearLayout(this); categoryBar.setOrientation(LinearLayout.VERTICAL); navScroll.addView(categoryBar); nav.addView(navScroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        DrawerLayout.LayoutParams navParams = new DrawerLayout.LayoutParams(dp(292), -1); navParams.gravity = Gravity.START; drawer.addView(nav, navParams);
-
-        menu.setOnClickListener(v -> drawer.openDrawer(Gravity.START));
+        favoritesButton.setOnClickListener(v -> { favoriteOnly = !favoriteOnly; recentOnly = false; selectedCategory = favoriteOnly ? "Favoritos" : "Todos"; favoritesButton.setText(favoriteOnly ? "★" : "☆"); filterChannels(searchInput.getText().toString()); });
         edit.setOnClickListener(v -> settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
         search.setOnClickListener(v -> { searchInput.setVisibility(searchInput.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); if (searchInput.getVisibility() == View.VISIBLE) searchInput.requestFocus(); });
         refresh.setOnClickListener(v -> { if (lastRemoteUrl.isEmpty()) toast("Carga primero una playlist remota"); else { urlInput.setText(lastRemoteUrl); loadFromUrl(); }});
         searchInput.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence s,int st,int c,int a){} public void onTextChanged(CharSequence s,int st,int b,int c){ filterChannels(s.toString()); } public void afterTextChanged(Editable e){} });
-        setContentView(drawer);
+        setContentView(root);
     }
 
     private Button toolbarButton(String text) { Button b = new Button(this); b.setText(text); b.setTextColor(Color.WHITE); b.setTextSize(22); b.setAllCaps(false); b.setMinWidth(0); b.setPadding(0,0,0,0); b.setBackgroundColor(Color.TRANSPARENT); return b; }
@@ -145,6 +135,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void rebuildCategories() {
+        if (categoryBar == null) return;
         categoryBar.removeAllViews();
         addCategory("★ Favoritos  (" + favorites.size() + ")", favorites.size() > 0, true);
         addCategory("▶ Recientes  (" + recentUrls().size() + ")", !recentUrls().isEmpty(), false);
@@ -174,7 +165,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(158),1); cp.setMargins(dp(4),dp(4),dp(4),dp(4)); row.addView(card,cp);
     }
 
-    private void openChannel(Channel c){ rememberRecent(c); int index=visibleChannels.indexOf(c); Intent i=new Intent(this,PlayerActivity.class); i.putExtra("channel",c); i.putExtra("channel_list",new ArrayList<>(visibleChannels)); i.putExtra("channel_index",index); startActivity(i); }
+    private void openChannel(Channel c){ int index=visibleChannels.indexOf(c); Intent i=new Intent(this,PlayerActivity.class); i.putExtra("channel",c); i.putExtra("channel_list",new ArrayList<>(visibleChannels)); i.putExtra("channel_index",index); startActivity(i); }
     private void loadLogo(Channel c, ImageView target) {
         String image = c.getImage().trim();
         if (image.startsWith("//")) image = "https:" + image;
@@ -197,7 +188,7 @@ public class MainActivity extends AppCompatActivity {
     private void onFileSelected(Uri uri){if(uri==null)return;setLoading(true);executor.execute(()->{try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IllegalArgumentException("No se pudo abrir el archivo");List<Channel> p=PlaylistParser.parse(readText(in));runOnUiThread(()->showChannels(p,"archivo"));}catch(Exception e){showError(e);}});}
     private String readText(InputStream in)throws Exception{StringBuilder s=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)s.append(l).append('\n');}return s.toString();}
     private void showChannels(List<Channel> p,String source){setLoading(false);channels.clear();channels.addAll(p);saveCachedChannels();lastRemoteUrl=urlInput.getText().toString().trim();selectedCategory="Todos";favoriteOnly=false;recentOnly=false;rebuildCategories();filterChannels("");statusText.setText("Playlist cargada desde "+source+": "+channels.size()+" canales");}
-    private void toggleFavorite(Channel c){if(!favorites.add(c.getUrl()))favorites.remove(c.getUrl());preferences.edit().putStringSet("favorites",new HashSet<>(favorites)).apply();rebuildCategories();filterChannels(searchInput.getText().toString());toast(favorites.contains(c.getUrl())?"Añadido a favoritos":"Quitado de favoritos");}
+    private void toggleFavorite(Channel c){if(!favorites.add(c.getUrl()))favorites.remove(c.getUrl());preferences.edit().putString("favorites_json",new Gson().toJson(new ArrayList<>(favorites))).putStringSet("favorites",new HashSet<>(favorites)).apply();rebuildCategories();filterChannels(searchInput.getText().toString());toast(favorites.contains(c.getUrl())?"Añadido a favoritos":"Quitado de favoritos");}
     private void saveCachedChannels(){ preferences.edit().putString("cached_channels",new Gson().toJson(channels)).putLong("cached_at",System.currentTimeMillis()).apply(); }
     private void restoreCachedChannels(){
         String raw=preferences.getString("cached_channels",""); if(raw.isEmpty()) return;
