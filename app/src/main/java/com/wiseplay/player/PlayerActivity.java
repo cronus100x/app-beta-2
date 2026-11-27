@@ -52,6 +52,12 @@ public class PlayerActivity extends AppCompatActivity {
     private int channelIndex;
     private SharedPreferences preferences;
     private TextView errorText;
+    private TextView qualityText;
+    private View controlsOverlay;
+    private final Handler controlsHandler = new Handler(Looper.getMainLooper());
+    private final Runnable hideControls = () -> {
+        if (controlsOverlay != null) controlsOverlay.setVisibility(View.GONE);
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,6 +65,8 @@ public class PlayerActivity extends AppCompatActivity {
         setContentView(R.layout.activity_player);
         playerView = findViewById(R.id.playerView);
         errorText = findViewById(R.id.errorText);
+        qualityText = findViewById(R.id.qualityText);
+        controlsOverlay = findViewById(R.id.controlsOverlay);
         tokenManager = TokenManager.get(this);
         preferences = getSharedPreferences("wiseplay_preferences", MODE_PRIVATE);
         dataSaver = preferences.getBoolean("data_saver", false);
@@ -72,7 +80,7 @@ public class PlayerActivity extends AppCompatActivity {
         ((TextView) findViewById(R.id.titleText)).setText(channel.getName());
 
         findViewById(R.id.backButton).setOnClickListener(v -> finish());
-        findViewById(R.id.fullscreenButton).setOnClickListener(v -> setFullscreen(!fullscreen));
+        playerView.setOnClickListener(v -> toggleControls());
         findViewById(R.id.previousButton).setOnClickListener(v -> moveChannel(-1));
         findViewById(R.id.nextButton).setOnClickListener(v -> moveChannel(1));
         findViewById(R.id.saverButton).setOnClickListener(v -> {
@@ -80,15 +88,37 @@ public class PlayerActivity extends AppCompatActivity {
             preferences.edit().putBoolean("data_saver", dataSaver).apply();
             updateSaverButton();
             preparePlayer(true);
+            showControls();
         });
-        findViewById(R.id.retryButton).setOnClickListener(v -> preparePlayer(true));
+        findViewById(R.id.retryButton).setOnClickListener(v -> { preparePlayer(true); showControls(); });
         updateSaverButton();
+        updateQualityLabel();
         setFullscreen(true);
         preparePlayer(false);
     }
 
     private void updateSaverButton() {
         ((Button) findViewById(R.id.saverButton)).setText(dataSaver ? "Ahorro: sí" : "Ahorro: no");
+    }
+
+    private void updateQualityLabel() {
+        if (qualityText != null) qualityText.setText(dataSaver
+                ? "Ahorro activo · calidad más baja"
+                : "Calidad automática");
+    }
+
+    private void showControls() {
+        if (controlsOverlay == null) return;
+        controlsOverlay.setVisibility(View.VISIBLE);
+        controlsHandler.removeCallbacks(hideControls);
+        controlsHandler.postDelayed(hideControls, 3500L);
+    }
+
+    private void toggleControls() {
+        if (controlsOverlay != null && controlsOverlay.getVisibility() == View.VISIBLE) {
+            controlsHandler.removeCallbacks(hideControls);
+            controlsOverlay.setVisibility(View.GONE);
+        } else showControls();
     }
 
     private void moveChannel(int direction) {
@@ -196,6 +226,8 @@ public class PlayerActivity extends AppCompatActivity {
         player.setMediaItem(mediaItemBuilder.build());
         player.prepare();
         player.play();
+        updateQualityLabel();
+        showControls();
     }
 
     private boolean isUnauthorized(PlaybackException error) {
@@ -243,6 +275,7 @@ public class PlayerActivity extends AppCompatActivity {
     }
 
     @Override protected void onDestroy() {
+        controlsHandler.removeCallbacksAndMessages(null);
         if (player != null) player.release();
         super.onDestroy();
     }

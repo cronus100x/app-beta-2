@@ -3,7 +3,9 @@ package com.wiseplay.player;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
@@ -74,6 +76,7 @@ public class MainActivity extends AppCompatActivity {
         filePicker = registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::onFileSelected);
         buildUi();
         refreshSavedUrls();
+        autoLoadSavedUrl();
     }
 
     private void buildUi() {
@@ -82,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout sidebar = panel(); sidebar.setPadding(dp(8), dp(8), dp(8), dp(8));
         TextView catTitle = label("CATEGORÍAS", 11, MUTED); catTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD); sidebar.addView(catTitle, wrap());
-        HorizontalScrollView sideScroll = new HorizontalScrollView(this); sideScroll.setVisibility(View.GONE);
+        ScrollView sideScroll = new ScrollView(this);
         categoryBar = new LinearLayout(this); categoryBar.setOrientation(LinearLayout.VERTICAL); sideScroll.addView(categoryBar); sidebar.addView(sideScroll, new LinearLayout.LayoutParams(-1, 0, 1));
         main.addView(sidebar, new LinearLayout.LayoutParams(dp(132), -1));
 
@@ -139,12 +142,30 @@ public class MainActivity extends AppCompatActivity {
     private void addCard(LinearLayout row, Channel c) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setGravity(Gravity.CENTER_HORIZONTAL); card.setPadding(dp(10), dp(4), dp(10), dp(10)); card.setBackground(cardBackground()); card.setOnClickListener(v -> openChannel(c)); card.setOnLongClickListener(v -> { toggleFavorite(c); return true; });
         TextView star=label(favorites.contains(c.getUrl())?"★":"☆",18,Color.rgb(255,209,102)); star.setGravity(Gravity.END); card.addView(star,new LinearLayout.LayoutParams(-1,dp(24)));
-        TextView logo=label(initials(c.getName()),28,ACCENT); logo.setGravity(Gravity.CENTER); logo.setTypeface(Typeface.DEFAULT,Typeface.BOLD); card.addView(logo,new LinearLayout.LayoutParams(-1,dp(76)));
+        ImageView logo = new ImageView(this); logo.setScaleType(ImageView.ScaleType.FIT_CENTER); logo.setPadding(dp(12),dp(8),dp(12),dp(8)); logo.setBackground(new ColorDrawable(ACCENT)); logo.setContentDescription("Imagen de " + c.getName()); card.addView(logo,new LinearLayout.LayoutParams(-1,dp(76))); loadLogo(c, logo);
         TextView name=label(c.getName(),13,PRIMARY); name.setGravity(Gravity.CENTER); name.setMaxLines(2); card.addView(name,new LinearLayout.LayoutParams(-1,dp(42)));
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(166),1); cp.setMargins(dp(4),dp(4),dp(4),dp(4)); row.addView(card,cp);
     }
 
     private void openChannel(Channel c){ int index=visibleChannels.indexOf(c); Intent i=new Intent(this,PlayerActivity.class); i.putExtra("channel",c); i.putExtra("channel_list",new ArrayList<>(visibleChannels)); i.putExtra("channel_index",index); startActivity(i); }
+    private void loadLogo(Channel c, ImageView target) {
+        String image = c.getImage().trim();
+        if (image.startsWith("//")) image = "https:" + image;
+        if (!image.startsWith("http://") && !image.startsWith("https://")) return;
+        final String imageUrl = image;
+        executor.execute(() -> {
+            try {
+                HttpURLConnection con = (HttpURLConnection) new URL(imageUrl).openConnection();
+                con.setConnectTimeout(10000); con.setReadTimeout(15000); con.setInstanceFollowRedirects(true);
+                if (!c.getUserAgent().isEmpty()) con.setRequestProperty("User-Agent", c.getUserAgent());
+                if (!c.getReferer().isEmpty()) con.setRequestProperty("Referer", c.getReferer());
+                try (InputStream input = con.getInputStream()) {
+                    android.graphics.Bitmap bitmap = BitmapFactory.decodeStream(input);
+                    if (bitmap != null) runOnUiThread(() -> target.setImageBitmap(bitmap));
+                } finally { con.disconnect(); }
+            } catch (Exception ignored) { }
+        });
+    }
     private void loadFromUrl(){ String u=urlInput.getText().toString().trim(); if(!u.startsWith("http://")&&!u.startsWith("https://")){urlInput.setError("Introduce una URL válida");return;} lastRemoteUrl=u; setLoading(true); executor.execute(()->{try{HttpURLConnection con=(HttpURLConnection)new URL(u).openConnection();con.setConnectTimeout(15000);con.setReadTimeout(30000);con.setRequestProperty("User-Agent","WiseplayPlayer/1.0");try(InputStream in=con.getInputStream()){List<Channel> p=PlaylistParser.parse(readText(in));runOnUiThread(()->showChannels(p,"URL"));}finally{con.disconnect();}}catch(Exception e){showError(e);}}); }
     private void onFileSelected(Uri uri){if(uri==null)return;setLoading(true);executor.execute(()->{try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IllegalArgumentException("No se pudo abrir el archivo");List<Channel> p=PlaylistParser.parse(readText(in));runOnUiThread(()->showChannels(p,"archivo"));}catch(Exception e){showError(e);}});}
     private String readText(InputStream in)throws Exception{StringBuilder s=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)s.append(l).append('\n');}return s.toString();}
@@ -153,6 +174,12 @@ public class MainActivity extends AppCompatActivity {
     private void saveCurrentUrl(){String u=urlInput.getText().toString().trim();if(!u.startsWith("http://")&&!u.startsWith("https://")){urlInput.setError("Introduce una URL válida");return;}Set<String>s=new LinkedHashSet<>(preferences.getStringSet("playlist_urls",Collections.emptySet()));s.add(u);preferences.edit().putStringSet("playlist_urls",s).apply();refreshSavedUrls();toast("URL guardada");}
     private void deleteSelectedUrl(){if(savedUrlAdapter==null||savedUrlAdapter.getCount()==0)return;String u=savedUrlAdapter.getItem(savedUrlSpinner.getSelectedItemPosition());Set<String>s=new LinkedHashSet<>(preferences.getStringSet("playlist_urls",Collections.emptySet()));s.remove(u);preferences.edit().putStringSet("playlist_urls",s).apply();refreshSavedUrls();toast("URL eliminada");}
     private void refreshSavedUrls(){if(savedUrlAdapter==null)return;savedUrlAdapter.clear();savedUrlAdapter.addAll(new ArrayList<>(preferences.getStringSet("playlist_urls",Collections.emptySet())));savedUrlAdapter.notifyDataSetChanged();}
+    private void autoLoadSavedUrl(){
+        Set<String> urls = preferences.getStringSet("playlist_urls", Collections.emptySet());
+        if (urls.isEmpty()) return;
+        String saved = urls.iterator().next();
+        if (saved != null && !saved.trim().isEmpty()) { urlInput.setText(saved); loadFromUrl(); }
+    }
     private void showError(Exception e){runOnUiThread(()->{setLoading(false);String m=e.getMessage()==null?"No se pudo leer la playlist":e.getMessage();statusText.setText("Error: "+m);toast(m);});}
     private void setLoading(boolean b){runOnUiThread(()->progressBar.setVisibility(b?View.VISIBLE:View.GONE));}
     private String initials(String s){String[] p=s.trim().split("\\s+");return p.length>1?(p[0].substring(0,1)+p[1].substring(0,1)).toUpperCase():s.substring(0,Math.min(2,s.length())).toUpperCase();}
