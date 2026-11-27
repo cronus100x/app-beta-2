@@ -32,6 +32,7 @@ import com.google.gson.reflect.TypeToken;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.drawerlayout.widget.DrawerLayout;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -85,33 +86,51 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void buildUi() {
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(8), dp(8), dp(8), dp(8)); root.setBackgroundColor(BG);
-        LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.HORIZONTAL); root.addView(main, new LinearLayout.LayoutParams(-1, 0, 1));
+        DrawerLayout drawer = new DrawerLayout(this);
+        drawer.setBackgroundColor(BG);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(BG);
+        drawer.addView(root, new DrawerLayout.LayoutParams(-1, -1));
 
-        LinearLayout sidebar = panel(); sidebar.setPadding(dp(8), dp(8), dp(8), dp(8));
-        TextView catTitle = label("CATEGORÍAS", 11, MUTED); catTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD); sidebar.addView(catTitle, wrap());
-        ScrollView sideScroll = new ScrollView(this);
-        categoryBar = new LinearLayout(this); categoryBar.setOrientation(LinearLayout.VERTICAL); sideScroll.addView(categoryBar); sidebar.addView(sideScroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        main.addView(sidebar, new LinearLayout.LayoutParams(dp(132), -1));
+        LinearLayout toolbar = new LinearLayout(this);
+        toolbar.setGravity(Gravity.CENTER_VERTICAL);
+        toolbar.setPadding(dp(6), 0, dp(6), 0);
+        toolbar.setBackgroundColor(ACCENT);
+        Button menu = toolbarButton("☰"); menu.setContentDescription("Explorar categorías");
+        toolbar.addView(menu, new LinearLayout.LayoutParams(dp(48), dp(56)));
+        TextView title = label("WIS TV", 20, Color.WHITE); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        toolbar.addView(title, new LinearLayout.LayoutParams(0, dp(56), 1));
+        Button edit = toolbarButton("✎"); edit.setContentDescription("Gestionar playlists"); toolbar.addView(edit, new LinearLayout.LayoutParams(dp(44), dp(56)));
+        Button search = toolbarButton("⌕"); search.setContentDescription("Buscar canales"); toolbar.addView(search, new LinearLayout.LayoutParams(dp(44), dp(56)));
+        Button refresh = toolbarButton("⟳"); refresh.setContentDescription("Actualizar canales"); toolbar.addView(refresh, new LinearLayout.LayoutParams(dp(44), dp(56)));
+        root.addView(toolbar, new LinearLayout.LayoutParams(-1, dp(56)));
 
-        LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(8), 0, 0, 0); main.addView(content, new LinearLayout.LayoutParams(0, -1, 1));
-        LinearLayout header = new LinearLayout(this); header.setGravity(Gravity.CENTER_VERTICAL); content.addView(header, wrap());
-        LinearLayout titleBox = new LinearLayout(this); titleBox.setOrientation(LinearLayout.VERTICAL); header.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView title = label("Wis TV", 22, PRIMARY); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD); titleBox.addView(title);
-        statusText = label("Carga una playlist para comenzar", 12, MUTED); titleBox.addView(statusText);
-        progressBar = new ProgressBar(this); progressBar.setVisibility(View.GONE); header.addView(progressBar, new LinearLayout.LayoutParams(dp(28), dp(28)));
+        searchInput = edit("Buscar canal o categoría"); searchInput.setVisibility(View.GONE); root.addView(searchInput, new LinearLayout.LayoutParams(-1, dp(48)));
+        LinearLayout hero = new LinearLayout(this); hero.setGravity(Gravity.CENTER_VERTICAL); hero.setPadding(dp(14), dp(10), dp(14), dp(6)); hero.setBackgroundColor(Color.BLACK);
+        TextView heroTitle = label("WIS CHANNELS", 16, Color.rgb(255, 205, 60)); heroTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD); hero.addView(heroTitle, new LinearLayout.LayoutParams(0, -2, 1));
+        statusText = label("Carga una playlist para comenzar", 11, MUTED); hero.addView(statusText); root.addView(hero, wrap());
+        progressBar = new ProgressBar(this); progressBar.setVisibility(View.GONE); root.addView(progressBar, new LinearLayout.LayoutParams(-1, dp(3)));
 
-        searchInput = edit("Buscar canal o categoría"); content.addView(searchInput, new LinearLayout.LayoutParams(-1, dp(48)));
-        LinearLayout actions = new LinearLayout(this); actions.setPadding(0, dp(8), 0, dp(4)); content.addView(actions, wrap());
-        Button refresh = action("Actualizar"); refresh.setOnClickListener(v -> { if (lastRemoteUrl.isEmpty()) toast("Carga primero una playlist remota"); else { urlInput.setText(lastRemoteUrl); loadFromUrl(); }}); actions.addView(refresh, new LinearLayout.LayoutParams(0, dp(44), 1));
-        Button settings = action("⚙ Ajustes"); settings.setOnClickListener(v -> settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE)); actions.addView(settings, new LinearLayout.LayoutParams(0, dp(44), 1));
+        settingsPanel = panel(); settingsPanel.setPadding(dp(10), dp(8), dp(10), dp(8)); settingsPanel.setVisibility(View.GONE); root.addView(settingsPanel, wrap()); buildSettings();
+        ScrollView scroll = new ScrollView(this); channelGrid = new LinearLayout(this); channelGrid.setOrientation(LinearLayout.VERTICAL); channelGrid.setPadding(dp(6), dp(6), dp(6), dp(24)); scroll.addView(channelGrid); root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        settingsPanel = panel(); settingsPanel.setPadding(dp(10), dp(8), dp(10), dp(8)); settingsPanel.setVisibility(View.GONE); content.addView(settingsPanel, wrap());
-        buildSettings();
-        ScrollView scroll = new ScrollView(this); channelGrid = new LinearLayout(this); channelGrid.setOrientation(LinearLayout.VERTICAL); channelGrid.setPadding(dp(2), dp(2), dp(2), dp(20)); scroll.addView(channelGrid); content.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(root);
+        LinearLayout nav = panel(); nav.setPadding(dp(12), dp(16), dp(12), dp(12));
+        TextView navTitle = label("EXPLORAR", 18, Color.WHITE); navTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD); nav.addView(navTitle, wrap());
+        TextView navHint = label("Canales y categorías", 12, MUTED); nav.addView(navHint, wrap());
+        Button all = action("▶  TODOS LOS CANALES"); all.setTextColor(Color.WHITE); all.setGravity(Gravity.START|Gravity.CENTER_VERTICAL); all.setBackground(round(Color.rgb(235,112,20),12,Color.rgb(255,180,80),1)); all.setOnClickListener(v -> { favoriteOnly=false; recentOnly=false; selectedCategory="Todos"; filterChannels(searchInput.getText().toString()); drawer.closeDrawers(); }); nav.addView(all, new LinearLayout.LayoutParams(-1, dp(48)));
+        ScrollView navScroll = new ScrollView(this); categoryBar = new LinearLayout(this); categoryBar.setOrientation(LinearLayout.VERTICAL); navScroll.addView(categoryBar); nav.addView(navScroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        DrawerLayout.LayoutParams navParams = new DrawerLayout.LayoutParams(dp(292), -1); navParams.gravity = Gravity.START; drawer.addView(nav, navParams);
+
+        menu.setOnClickListener(v -> drawer.openDrawer(Gravity.START));
+        edit.setOnClickListener(v -> settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        search.setOnClickListener(v -> { searchInput.setVisibility(searchInput.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); if (searchInput.getVisibility() == View.VISIBLE) searchInput.requestFocus(); });
+        refresh.setOnClickListener(v -> { if (lastRemoteUrl.isEmpty()) toast("Carga primero una playlist remota"); else { urlInput.setText(lastRemoteUrl); loadFromUrl(); }});
         searchInput.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence s,int st,int c,int a){} public void onTextChanged(CharSequence s,int st,int b,int c){ filterChannels(s.toString()); } public void afterTextChanged(Editable e){} });
+        setContentView(drawer);
     }
+
+    private Button toolbarButton(String text) { Button b = new Button(this); b.setText(text); b.setTextColor(Color.WHITE); b.setTextSize(22); b.setAllCaps(false); b.setMinWidth(0); b.setPadding(0,0,0,0); b.setBackgroundColor(Color.TRANSPARENT); return b; }
 
     private void buildSettings() {
         TextView t = label("Ajustes · Playlists", 16, PRIMARY); t.setTypeface(Typeface.DEFAULT, Typeface.BOLD); settingsPanel.addView(t, wrap());
@@ -143,15 +162,15 @@ public class MainActivity extends AppCompatActivity {
     }
     private void renderChannels() {
         channelGrid.removeAllViews(); LinearLayout row = null;
-        for (int i=0;i<visibleChannels.size();i++) { if(i%2==0){ row=new LinearLayout(this); row.setGravity(Gravity.TOP); channelGrid.addView(row, wrap()); } addCard(row, visibleChannels.get(i)); }
+        for (int i=0;i<visibleChannels.size();i++) { if(i%3==0){ row=new LinearLayout(this); row.setGravity(Gravity.TOP); channelGrid.addView(row, wrap()); } addCard(row, visibleChannels.get(i)); }
         statusText.setText(visibleChannels.size()+" canales disponibles"); channelGrid.requestLayout();
     }
     private void addCard(LinearLayout row, Channel c) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setGravity(Gravity.CENTER_HORIZONTAL); card.setPadding(dp(10), dp(4), dp(10), dp(10)); card.setBackground(cardBackground()); card.setOnClickListener(v -> openChannel(c)); card.setOnLongClickListener(v -> { toggleFavorite(c); return true; });
-        TextView star=label(favorites.contains(c.getUrl())?"★":"☆",18,Color.rgb(255,209,102)); star.setGravity(Gravity.END); card.addView(star,new LinearLayout.LayoutParams(-1,dp(24)));
+        TextView badges=label((favorites.contains(c.getUrl())?"★  ":"") + "LIVE",10,Color.rgb(255,110,110)); badges.setGravity(Gravity.START); badges.setTypeface(Typeface.DEFAULT,Typeface.BOLD); card.addView(badges,new LinearLayout.LayoutParams(-1,dp(20)));
         ImageView logo = new ImageView(this); logo.setScaleType(ImageView.ScaleType.FIT_CENTER); logo.setPadding(dp(12),dp(8),dp(12),dp(8)); logo.setBackground(new ColorDrawable(ACCENT)); logo.setContentDescription("Imagen de " + c.getName()); card.addView(logo,new LinearLayout.LayoutParams(-1,dp(76))); loadLogo(c, logo);
         TextView name=label(c.getName(),13,PRIMARY); name.setGravity(Gravity.CENTER); name.setMaxLines(2); card.addView(name,new LinearLayout.LayoutParams(-1,dp(42)));
-        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(166),1); cp.setMargins(dp(4),dp(4),dp(4),dp(4)); row.addView(card,cp);
+        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(158),1); cp.setMargins(dp(4),dp(4),dp(4),dp(4)); row.addView(card,cp);
     }
 
     private void openChannel(Channel c){ rememberRecent(c); int index=visibleChannels.indexOf(c); Intent i=new Intent(this,PlayerActivity.class); i.putExtra("channel",c); i.putExtra("channel_list",new ArrayList<>(visibleChannels)); i.putExtra("channel_index",index); startActivity(i); }

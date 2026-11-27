@@ -31,6 +31,7 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.drawerlayout:drawerlayout:1.2.0'
     implementation 'androidx.media3:media3-exoplayer:1.2.0'
     implementation 'androidx.media3:media3-exoplayer-dash:1.2.0'
     implementation 'androidx.media3:media3-exoplayer-hls:1.2.0'
