@@ -17,6 +17,7 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.media3.common.C;
+import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
@@ -102,9 +103,18 @@ public class PlayerActivity extends AppCompatActivity {
     }
 
     private void updateQualityLabel() {
-        if (qualityText != null) qualityText.setText(dataSaver
-                ? "Ahorro activo · calidad más baja"
-                : "Calidad automática");
+        if (qualityText == null) return;
+        Format format = player == null ? null : player.getVideoFormat();
+        int height = format == null ? Format.NO_VALUE : format.height;
+        if (height > 0) {
+            qualityText.setText(dataSaver
+                    ? "Ahorro activo · calidad " + height + "p"
+                    : "Calidad " + height + "p");
+        } else {
+            qualityText.setText(dataSaver
+                    ? "Ahorro activo · calidad baja"
+                    : "Calidad automática");
+        }
     }
 
     private void showControls() {
@@ -200,6 +210,13 @@ public class PlayerActivity extends AppCompatActivity {
         player.addListener(new Player.Listener() {
             @Override public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_READY) errorText.setVisibility(View.GONE);
+                updateQualityLabel();
+            }
+            @Override public void onVideoSizeChanged(androidx.media3.common.VideoSize videoSize) {
+                updateQualityLabel();
+            }
+            @Override public void onTracksChanged(androidx.media3.common.Tracks tracks) {
+                updateQualityLabel();
             }
             @Override public void onPlayerError(PlaybackException error) {
                 if (isUnauthorized(error) && !retryingUnauthorized
