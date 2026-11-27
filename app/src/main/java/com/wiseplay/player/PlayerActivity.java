@@ -3,6 +3,8 @@ package com.wiseplay.player;
 import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
@@ -125,7 +127,7 @@ public class PlayerActivity extends AppCompatActivity {
                     lastUnauthorizedRetry = System.currentTimeMillis();
                     tokenManager.renew();
                     Toast.makeText(PlayerActivity.this, "Sesión renovada, reintentando…", Toast.LENGTH_SHORT).show();
-                    player.postDelayed(() -> {
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         preparePlayer(true);
                         retryingUnauthorized = false;
                     }, 250);
@@ -158,7 +160,6 @@ public class PlayerActivity extends AppCompatActivity {
         }
         new TrackSelectionDialogBuilder(this, title, player, trackType)
                 .setShowDisableOption(trackType == C.TRACK_TYPE_TEXT)
-                .setShowAutoOption(true)
                 .build().show();
     }
 
