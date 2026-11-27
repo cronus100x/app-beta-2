@@ -69,9 +69,10 @@ public final class PlaylistParser {
         Object root = text.startsWith("[") ? new JSONArray(text) : new JSONObject(text);
         if (root instanceof JSONObject) {
             JSONObject object = (JSONObject) root;
-            String rootGroup = firstString(object, "name", "title", "group", "category");
-            parseGroups(object.optJSONArray("groups"), rootGroup, channels);
-            parseStations(object.optJSONArray("stations"), rootGroup, channels);
+            parseGroups(object.optJSONArray("groups"), "", channels);
+            parseStations(object.optJSONArray("stations"), "", channels);
+            parseStations(object.optJSONArray("channels"), "", channels);
+            parseStations(object.optJSONArray("items"), "", channels);
         }
         collectJsonChannels(root, "", channels);
         if (channels.isEmpty()) throw new IllegalArgumentException("El JSON/W3U no contiene canales válidos");
@@ -87,6 +88,8 @@ public final class PlaylistParser {
             String fullName = parent == null || parent.isEmpty() ? name : parent + " / " + name;
             parseStations(group.optJSONArray("stations"), fullName, channels);
             parseStations(group.optJSONArray("channels"), fullName, channels);
+            parseStations(group.optJSONArray("items"), fullName, channels);
+            parseStations(group.optJSONArray("streams"), fullName, channels);
             parseGroups(group.optJSONArray("groups"), fullName, channels);
         }
     }
@@ -112,7 +115,7 @@ public final class PlaylistParser {
         }
         String nestedGroup = firstString(object, "name", "title", "group", "category");
         JSONArray groups = object.optJSONArray("groups");
-        if (groups != null) parseGroups(groups, group.isEmpty() ? nestedGroup : group + " / " + nestedGroup, channels);
+        if (groups != null) parseGroups(groups, group, channels);
         Iterator<String> keys = object.keys();
         while (keys.hasNext()) {
             String key = keys.next(); Object child = object.get(key);
