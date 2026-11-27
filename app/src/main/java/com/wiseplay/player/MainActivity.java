@@ -2,18 +2,24 @@ package com.wiseplay.player;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.text.InputType;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -38,303 +44,126 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
+    private static final int BG = Color.rgb(11, 16, 32);
+    private static final int SURFACE = Color.rgb(21, 29, 51);
+    private static final int SURFACE_ALT = Color.rgb(28, 39, 66);
+    private static final int ACCENT = Color.rgb(91, 140, 255);
+    private static final int MUTED = Color.rgb(155, 168, 199);
+    private static final int PRIMARY = Color.rgb(245, 247, 255);
+
     private final List<Channel> channels = new ArrayList<>();
     private final List<Channel> visibleChannels = new ArrayList<>();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private EditText urlInput;
-    private EditText searchInput;
+    private final Set<String> favorites = new HashSet<>();
+    private SharedPreferences preferences;
+    private ActivityResultLauncher<String[]> filePicker;
+    private EditText urlInput, searchInput;
     private TextView statusText;
     private ProgressBar progressBar;
-    private ArrayAdapter<String> channelAdapter;
-    private ActivityResultLauncher<String[]> filePicker;
-    private String lastRemoteUrl = "";
-    private SharedPreferences preferences;
-    private LinearLayout settingsPanel;
+    private LinearLayout channelGrid, categoryBar, settingsPanel;
     private Spinner savedUrlSpinner;
     private ArrayAdapter<String> savedUrlAdapter;
-    private final Set<String> favorites = new HashSet<>();
+    private String lastRemoteUrl = "";
+    private String selectedCategory = "Todos";
     private boolean favoriteOnly;
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    @Override protected void onCreate(Bundle state) {
+        super.onCreate(state);
         preferences = getSharedPreferences("wiseplay_preferences", MODE_PRIVATE);
         favorites.addAll(preferences.getStringSet("favorites", Collections.emptySet()));
-        filePicker = registerForActivityResult(
-                new ActivityResultContracts.OpenDocument(),
-                this::onFileSelected);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(24, 32, 24, 16);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        TextView title = new TextView(this);
-        title.setText("Wiseplay Player");
-        title.setTextSize(24);
-        title.setPadding(0, 0, 0, 12);
-        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        Button settingsButton = new Button(this);
-        settingsButton.setText("⚙");
-        settingsButton.setTextSize(22);
-        settingsButton.setContentDescription("Ajustes");
-        header.addView(settingsButton, new LinearLayout.LayoutParams(64, 54));
-        root.addView(header);
-
-        TextView help = new TextView(this);
-        help.setText("Carga una playlist M3U, M3U8 o JSON y toca un canal para reproducirlo.");
-        help.setPadding(0, 0, 0, 12);
-        root.addView(help);
-
-        settingsPanel = new LinearLayout(this);
-        settingsPanel.setOrientation(LinearLayout.VERTICAL);
-        settingsPanel.setVisibility(View.GONE);
-        TextView settingsTitle = new TextView(this);
-        settingsTitle.setText("Ajustes · Playlists");
-        settingsTitle.setTextSize(17);
-        settingsPanel.addView(settingsTitle);
-        urlInput = new EditText(this);
-        urlInput.setHint("URL de la playlist (.m3u, .m3u8 o .json)");
-        urlInput.setSingleLine(true);
-        urlInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        settingsPanel.addView(urlInput);
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        Button urlButton = new Button(this);
-        urlButton.setText("Cargar URL");
-        urlButton.setOnClickListener(view -> loadFromUrl());
-        actions.addView(urlButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-
-        Button saveButton = new Button(this);
-        saveButton.setText("Guardar URL");
-        saveButton.setOnClickListener(view -> saveCurrentUrl());
-        actions.addView(saveButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-
-        Button refreshButton = new Button(this);
-        refreshButton.setText("Actualizar");
-        refreshButton.setOnClickListener(view -> {
-            if (lastRemoteUrl.isEmpty()) {
-                Toast.makeText(this, "Carga primero una playlist remota", Toast.LENGTH_SHORT).show();
-            } else {
-                urlInput.setText(lastRemoteUrl);
-                loadFromUrl();
-            }
-        });
-        actions.addView(refreshButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-
-        Button fileButton = new Button(this);
-        fileButton.setText("Abrir archivo");
-        fileButton.setOnClickListener(view -> filePicker.launch(new String[]{
-                "text/*", "application/json", "application/octet-stream", "*/*"}));
-        actions.addView(fileButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        settingsPanel.addView(actions);
-        LinearLayout savedRow = new LinearLayout(this);
-        savedUrlSpinner = new Spinner(this);
-        savedUrlAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new ArrayList<>());
-        savedUrlSpinner.setAdapter(savedUrlAdapter);
-        savedUrlSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                if (position >= 0 && position < savedUrlAdapter.getCount()) urlInput.setText(savedUrlAdapter.getItem(position));
-            }
-            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
-        });
-        Button deleteUrl = new Button(this);
-        deleteUrl.setText("Eliminar");
-        deleteUrl.setOnClickListener(view -> deleteSelectedUrl());
-        savedRow.addView(savedUrlSpinner, new LinearLayout.LayoutParams(0, -2, 1));
-        savedRow.addView(deleteUrl, new LinearLayout.LayoutParams(120, -2));
-        settingsPanel.addView(savedRow);
-        root.addView(settingsPanel);
-        settingsButton.setOnClickListener(view -> settingsPanel.setVisibility(
-                settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
-
-        Button favoritesButton = new Button(this);
-        favoritesButton.setText("☆ Favoritos");
-        favoritesButton.setOnClickListener(view -> {
-            favoriteOnly = !favoriteOnly;
-            favoritesButton.setText(favoriteOnly ? "★ Todos los favoritos" : "☆ Favoritos");
-            filterChannels(searchInput == null ? "" : searchInput.getText().toString());
-        });
-        root.addView(favoritesButton);
-
-        searchInput = new EditText(this);
-        searchInput.setHint("Buscar canal o grupo");
-        searchInput.setSingleLine(true);
-        searchInput.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                filterChannels(s.toString());
-            }
-            @Override public void afterTextChanged(Editable s) { }
-        });
-        root.addView(searchInput);
-
-        progressBar = new ProgressBar(this);
-        progressBar.setVisibility(View.GONE);
-        root.addView(progressBar);
-
-        statusText = new TextView(this);
-        statusText.setText("Aún no hay ninguna playlist cargada.");
-        statusText.setPadding(0, 8, 0, 8);
-        root.addView(statusText);
-
-        ListView channelList = new ListView(this);
-        channelAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
-        channelList.setAdapter(channelAdapter);
-        channelList.setOnItemClickListener((parent, view, position, id) -> openChannel(position));
-        channelList.setOnItemLongClickListener((parent, view, position, id) -> {
-            toggleFavorite(visibleChannels.get(position));
-            return true;
-        });
-        root.addView(channelList, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
-
-        setContentView(root);
+        filePicker = registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::onFileSelected);
+        buildUi();
         refreshSavedUrls();
     }
 
-    private void loadFromUrl() {
-        String url = urlInput.getText().toString().trim();
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            urlInput.setError("Introduce una URL http:// o https://");
-            return;
-        }
-        setLoading(true);
-        lastRemoteUrl = url;
-        executor.execute(() -> {
-            try {
-                HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-                connection.setConnectTimeout(15000);
-                connection.setReadTimeout(30000);
-                connection.setRequestProperty("User-Agent", "WiseplayPlayer/1.0");
-                try (InputStream input = connection.getInputStream()) {
-                    String content = readText(input);
-                    List<Channel> parsed = PlaylistParser.parse(content);
-                    runOnUiThread(() -> showChannels(parsed, "URL"));
-                } finally {
-                    connection.disconnect();
-                }
-            } catch (Exception exception) {
-                showError(exception);
-            }
-        });
+    private void buildUi() {
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(8), dp(8), dp(8), dp(8)); root.setBackgroundColor(BG);
+        LinearLayout main = new LinearLayout(this); main.setOrientation(LinearLayout.HORIZONTAL); root.addView(main, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        LinearLayout sidebar = panel(); sidebar.setPadding(dp(8), dp(8), dp(8), dp(8));
+        TextView catTitle = label("CATEGORÍAS", 11, MUTED); catTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD); sidebar.addView(catTitle, wrap());
+        HorizontalScrollView sideScroll = new HorizontalScrollView(this); sideScroll.setVisibility(View.GONE);
+        categoryBar = new LinearLayout(this); categoryBar.setOrientation(LinearLayout.VERTICAL); sideScroll.addView(categoryBar); sidebar.addView(sideScroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        main.addView(sidebar, new LinearLayout.LayoutParams(dp(132), -1));
+
+        LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(8), 0, 0, 0); main.addView(content, new LinearLayout.LayoutParams(0, -1, 1));
+        LinearLayout header = new LinearLayout(this); header.setGravity(Gravity.CENTER_VERTICAL); content.addView(header, wrap());
+        LinearLayout titleBox = new LinearLayout(this); titleBox.setOrientation(LinearLayout.VERTICAL); header.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView title = label("Wiseplay Player", 22, PRIMARY); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD); titleBox.addView(title);
+        statusText = label("Carga una playlist para comenzar", 12, MUTED); titleBox.addView(statusText);
+        progressBar = new ProgressBar(this); progressBar.setVisibility(View.GONE); header.addView(progressBar, new LinearLayout.LayoutParams(dp(28), dp(28)));
+
+        searchInput = edit("Buscar canal o categoría"); content.addView(searchInput, new LinearLayout.LayoutParams(-1, dp(48)));
+        LinearLayout actions = new LinearLayout(this); actions.setPadding(0, dp(8), 0, dp(4)); content.addView(actions, wrap());
+        Button refresh = action("Actualizar"); refresh.setOnClickListener(v -> { if (lastRemoteUrl.isEmpty()) toast("Carga primero una playlist remota"); else { urlInput.setText(lastRemoteUrl); loadFromUrl(); }}); actions.addView(refresh, new LinearLayout.LayoutParams(0, dp(44), 1));
+        Button settings = action("⚙ Ajustes"); settings.setOnClickListener(v -> settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE)); actions.addView(settings, new LinearLayout.LayoutParams(0, dp(44), 1));
+
+        settingsPanel = panel(); settingsPanel.setPadding(dp(10), dp(8), dp(10), dp(8)); settingsPanel.setVisibility(View.GONE); content.addView(settingsPanel, wrap());
+        buildSettings();
+        ScrollView scroll = new ScrollView(this); channelGrid = new LinearLayout(this); channelGrid.setOrientation(LinearLayout.VERTICAL); channelGrid.setPadding(dp(2), dp(2), dp(2), dp(20)); scroll.addView(channelGrid); content.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        setContentView(root);
+        searchInput.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence s,int st,int c,int a){} public void onTextChanged(CharSequence s,int st,int b,int c){ filterChannels(s.toString()); } public void afterTextChanged(Editable e){} });
     }
 
-    private void onFileSelected(Uri uri) {
-        if (uri == null) {
-            return;
-        }
-        setLoading(true);
-        executor.execute(() -> {
-            try (InputStream input = getContentResolver().openInputStream(uri)) {
-                if (input == null) {
-                    throw new IllegalArgumentException("No se pudo abrir el archivo");
-                }
-                List<Channel> parsed = PlaylistParser.parse(readText(input));
-                runOnUiThread(() -> showChannels(parsed, "archivo"));
-            } catch (Exception exception) {
-                showError(exception);
-            }
-        });
+    private void buildSettings() {
+        TextView t = label("Ajustes · Playlists", 16, PRIMARY); t.setTypeface(Typeface.DEFAULT, Typeface.BOLD); settingsPanel.addView(t, wrap());
+        urlInput = edit("URL de la playlist (.m3u, .m3u8 o .json)"); settingsPanel.addView(urlInput, new LinearLayout.LayoutParams(-1, dp(48)));
+        LinearLayout row = new LinearLayout(this); settingsPanel.addView(row, wrap());
+        Button load = action("Cargar URL"); load.setOnClickListener(v -> loadFromUrl()); row.addView(load, new LinearLayout.LayoutParams(0, dp(42), 1));
+        Button save = action("Guardar"); save.setOnClickListener(v -> saveCurrentUrl()); row.addView(save, new LinearLayout.LayoutParams(0, dp(42), 1));
+        Button file = action("Abrir archivo"); file.setOnClickListener(v -> filePicker.launch(new String[]{"text/*","application/json","*/*"})); row.addView(file, new LinearLayout.LayoutParams(0, dp(42), 1));
+        LinearLayout saved = new LinearLayout(this); settingsPanel.addView(saved, wrap());
+        savedUrlSpinner = new Spinner(this); savedUrlAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new ArrayList<>()); savedUrlSpinner.setAdapter(savedUrlAdapter); savedUrlSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){ public void onItemSelected(android.widget.AdapterView<?> p, View v,int pos,long id){ if(pos>=0&&pos<savedUrlAdapter.getCount()) urlInput.setText(savedUrlAdapter.getItem(pos)); } public void onNothingSelected(android.widget.AdapterView<?> p){} }); saved.addView(savedUrlSpinner, new LinearLayout.LayoutParams(0, -2, 1));
+        Button del = action("Eliminar"); del.setOnClickListener(v -> deleteSelectedUrl()); saved.addView(del, new LinearLayout.LayoutParams(dp(110), dp(44)));
     }
 
-    private String readText(InputStream input) throws Exception {
-        StringBuilder result = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(input, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                result.append(line).append('\n');
-            }
-        }
-        return result.toString();
+    private void rebuildCategories() {
+        categoryBar.removeAllViews();
+        addCategory("★ Favoritos", favorites.size() > 0, true);
+        addCategory("▦ Ver todos", true, false);
+        Set<String> groups = new LinkedHashSet<>(); for (Channel c : channels) if (!c.getGroup().isEmpty()) groups.add(c.getGroup());
+        for (String g : groups) addCategory("• " + g, true, false);
     }
-
-    private void showChannels(List<Channel> parsed, String source) {
-        setLoading(false);
-        channels.clear();
-        channels.addAll(parsed);
-        visibleChannels.clear();
-        visibleChannels.addAll(parsed);
-        filterChannels(searchInput == null ? "" : searchInput.getText().toString());
-        statusText.setText("Playlist cargada desde " + source + ": " + channels.size() + " canales");
-    }
+    private void addCategory(String text, boolean enabled, boolean fav) { Button b = action(text); b.setGravity(Gravity.START|Gravity.CENTER_VERTICAL); b.setTextSize(13); b.setEnabled(enabled); b.setOnClickListener(v -> { favoriteOnly=fav; selectedCategory=fav?"Favoritos":text; filterChannels(searchInput.getText().toString()); }); categoryBar.addView(b, new LinearLayout.LayoutParams(-1, dp(44))); }
 
     private void filterChannels(String query) {
-        String normalized = query == null ? "" : query.trim().toLowerCase();
-        visibleChannels.clear();
-        for (Channel channel : channels) {
-            if ((!favoriteOnly || favorites.contains(channel.getUrl()))
-                    && (normalized.isEmpty()
-                    || channel.getName().toLowerCase().contains(normalized)
-                    || channel.getGroup().toLowerCase().contains(normalized))) {
-                visibleChannels.add(channel);
-            }
-        }
-        channelAdapter.clear();
-        for (Channel channel : visibleChannels) channelAdapter.add(
-                favorites.contains(channel.getUrl()) ? "★ " + channel.getDisplayName() : channel.getDisplayName());
-        channelAdapter.notifyDataSetChanged();
+        String q = query == null ? "" : query.trim().toLowerCase(); visibleChannels.clear();
+        for (Channel c : channels) { boolean cat = favoriteOnly ? favorites.contains(c.getUrl()) : (selectedCategory.equals("Todos") || selectedCategory.equals("▦ Ver todos") || selectedCategory.equals("Ver todos") || selectedCategory.equals("Todos") || selectedCategory.equals("• "+c.getGroup())); boolean text = q.isEmpty() || c.getName().toLowerCase().contains(q) || c.getGroup().toLowerCase().contains(q); if(cat&&text) visibleChannels.add(c); }
+        renderChannels();
+    }
+    private void renderChannels() {
+        channelGrid.removeAllViews(); LinearLayout row = null;
+        for (int i=0;i<visibleChannels.size();i++) { if(i%2==0){ row=new LinearLayout(this); row.setGravity(Gravity.TOP); channelGrid.addView(row, wrap()); } addCard(row, visibleChannels.get(i)); }
+        statusText.setText(visibleChannels.size()+" canales disponibles"); channelGrid.requestLayout();
+    }
+    private void addCard(LinearLayout row, Channel c) {
+        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setGravity(Gravity.CENTER_HORIZONTAL); card.setPadding(dp(10), dp(4), dp(10), dp(10)); card.setBackground(cardBackground()); card.setOnClickListener(v -> openChannel(c)); card.setOnLongClickListener(v -> { toggleFavorite(c); return true; });
+        TextView star=label(favorites.contains(c.getUrl())?"★":"☆",18,Color.rgb(255,209,102)); star.setGravity(Gravity.END); card.addView(star,new LinearLayout.LayoutParams(-1,dp(24)));
+        TextView logo=label(initials(c.getName()),28,ACCENT); logo.setGravity(Gravity.CENTER); logo.setTypeface(Typeface.DEFAULT,Typeface.BOLD); card.addView(logo,new LinearLayout.LayoutParams(-1,dp(76)));
+        TextView name=label(c.getName(),13,PRIMARY); name.setGravity(Gravity.CENTER); name.setMaxLines(2); card.addView(name,new LinearLayout.LayoutParams(-1,dp(42)));
+        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(166),1); cp.setMargins(dp(4),dp(4),dp(4),dp(4)); row.addView(card,cp);
     }
 
-    private void showError(Exception exception) {
-        runOnUiThread(() -> {
-            setLoading(false);
-            String message = exception.getMessage() == null ? "No se pudo leer la playlist" : exception.getMessage();
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
-            statusText.setText("Error: " + message);
-        });
-    }
-
-    private void setLoading(boolean loading) {
-        runOnUiThread(() -> progressBar.setVisibility(loading ? View.VISIBLE : View.GONE));
-    }
-
-    private void openChannel(int position) {
-        if (position < 0 || position >= visibleChannels.size()) return;
-        Channel channel = visibleChannels.get(position);
-        Intent intent = new Intent(this, PlayerActivity.class);
-        intent.putExtra("channel", channel);
-        intent.putExtra("channel_list", new ArrayList<>(visibleChannels));
-        intent.putExtra("channel_index", position);
-        startActivity(intent);
-    }
-
-    private void toggleFavorite(Channel channel) {
-        if (!favorites.add(channel.getUrl())) favorites.remove(channel.getUrl());
-        preferences.edit().putStringSet("favorites", new HashSet<>(favorites)).apply();
-        filterChannels(searchInput == null ? "" : searchInput.getText().toString());
-        Toast.makeText(this, favorites.contains(channel.getUrl()) ? "Añadido a favoritos" : "Quitado de favoritos", Toast.LENGTH_SHORT).show();
-    }
-
-    private void saveCurrentUrl() {
-        String url = urlInput.getText().toString().trim();
-        if (!url.startsWith("http://") && !url.startsWith("https://")) { urlInput.setError("Introduce una URL válida"); return; }
-        Set<String> urls = new LinkedHashSet<>(preferences.getStringSet("playlist_urls", Collections.emptySet()));
-        urls.add(url); preferences.edit().putStringSet("playlist_urls", urls).apply();
-        refreshSavedUrls(); Toast.makeText(this, "URL guardada", Toast.LENGTH_SHORT).show();
-    }
-
-    private void deleteSelectedUrl() {
-        if (savedUrlAdapter == null || savedUrlAdapter.getCount() == 0) return;
-        String selected = savedUrlAdapter.getItem(savedUrlSpinner.getSelectedItemPosition());
-        Set<String> urls = new LinkedHashSet<>(preferences.getStringSet("playlist_urls", Collections.emptySet()));
-        urls.remove(selected); preferences.edit().putStringSet("playlist_urls", urls).apply();
-        refreshSavedUrls(); Toast.makeText(this, "URL eliminada", Toast.LENGTH_SHORT).show();
-    }
-
-    private void refreshSavedUrls() {
-        if (savedUrlAdapter == null) return;
-        savedUrlAdapter.clear();
-        savedUrlAdapter.addAll(new ArrayList<>(preferences.getStringSet("playlist_urls", Collections.emptySet())));
-        savedUrlAdapter.notifyDataSetChanged();
-    }
-
-    @Override
-    protected void onDestroy() {
-        executor.shutdownNow();
-        super.onDestroy();
-    }
+    private void openChannel(Channel c){ int index=visibleChannels.indexOf(c); Intent i=new Intent(this,PlayerActivity.class); i.putExtra("channel",c); i.putExtra("channel_list",new ArrayList<>(visibleChannels)); i.putExtra("channel_index",index); startActivity(i); }
+    private void loadFromUrl(){ String u=urlInput.getText().toString().trim(); if(!u.startsWith("http://")&&!u.startsWith("https://")){urlInput.setError("Introduce una URL válida");return;} lastRemoteUrl=u; setLoading(true); executor.execute(()->{try{HttpURLConnection con=(HttpURLConnection)new URL(u).openConnection();con.setConnectTimeout(15000);con.setReadTimeout(30000);con.setRequestProperty("User-Agent","WiseplayPlayer/1.0");try(InputStream in=con.getInputStream()){List<Channel> p=PlaylistParser.parse(readText(in));runOnUiThread(()->showChannels(p,"URL"));}finally{con.disconnect();}}catch(Exception e){showError(e);}}); }
+    private void onFileSelected(Uri uri){if(uri==null)return;setLoading(true);executor.execute(()->{try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IllegalArgumentException("No se pudo abrir el archivo");List<Channel> p=PlaylistParser.parse(readText(in));runOnUiThread(()->showChannels(p,"archivo"));}catch(Exception e){showError(e);}});}
+    private String readText(InputStream in)throws Exception{StringBuilder s=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)s.append(l).append('\n');}return s.toString();}
+    private void showChannels(List<Channel> p,String source){setLoading(false);channels.clear();channels.addAll(p);lastRemoteUrl=urlInput.getText().toString().trim();selectedCategory="Todos";favoriteOnly=false;rebuildCategories();filterChannels("");statusText.setText("Playlist cargada desde "+source+": "+channels.size()+" canales");}
+    private void toggleFavorite(Channel c){if(!favorites.add(c.getUrl()))favorites.remove(c.getUrl());preferences.edit().putStringSet("favorites",new HashSet<>(favorites)).apply();rebuildCategories();filterChannels(searchInput.getText().toString());toast(favorites.contains(c.getUrl())?"Añadido a favoritos":"Quitado de favoritos");}
+    private void saveCurrentUrl(){String u=urlInput.getText().toString().trim();if(!u.startsWith("http://")&&!u.startsWith("https://")){urlInput.setError("Introduce una URL válida");return;}Set<String>s=new LinkedHashSet<>(preferences.getStringSet("playlist_urls",Collections.emptySet()));s.add(u);preferences.edit().putStringSet("playlist_urls",s).apply();refreshSavedUrls();toast("URL guardada");}
+    private void deleteSelectedUrl(){if(savedUrlAdapter==null||savedUrlAdapter.getCount()==0)return;String u=savedUrlAdapter.getItem(savedUrlSpinner.getSelectedItemPosition());Set<String>s=new LinkedHashSet<>(preferences.getStringSet("playlist_urls",Collections.emptySet()));s.remove(u);preferences.edit().putStringSet("playlist_urls",s).apply();refreshSavedUrls();toast("URL eliminada");}
+    private void refreshSavedUrls(){if(savedUrlAdapter==null)return;savedUrlAdapter.clear();savedUrlAdapter.addAll(new ArrayList<>(preferences.getStringSet("playlist_urls",Collections.emptySet())));savedUrlAdapter.notifyDataSetChanged();}
+    private void showError(Exception e){runOnUiThread(()->{setLoading(false);String m=e.getMessage()==null?"No se pudo leer la playlist":e.getMessage();statusText.setText("Error: "+m);toast(m);});}
+    private void setLoading(boolean b){runOnUiThread(()->progressBar.setVisibility(b?View.VISIBLE:View.GONE));}
+    private String initials(String s){String[] p=s.trim().split("\\s+");return p.length>1?(p[0].substring(0,1)+p[1].substring(0,1)).toUpperCase():s.substring(0,Math.min(2,s.length())).toUpperCase();}
+    private TextView label(String s,float size,int color){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);return v;}
+    private EditText edit(String hint){EditText e=new EditText(this);e.setHint(hint);e.setHintTextColor(MUTED);e.setTextColor(PRIMARY);e.setSingleLine(true);e.setInputType(InputType.TYPE_CLASS_TEXT);e.setPadding(dp(14),0,dp(14),0);e.setBackground(round(SURFACE,12,0,0));return e;}
+    private Button action(String text){Button b=new Button(this);b.setText(text);b.setTextColor(PRIMARY);b.setTextSize(12);b.setAllCaps(false);b.setMinWidth(0);b.setPadding(dp(8),0,dp(8),0);b.setBackground(round(SURFACE_ALT,12,ACCENT,1));return b;}
+    private LinearLayout panel(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setBackground(round(SURFACE,12,Color.rgb(38,52,85),1));return l;}
+    private GradientDrawable cardBackground(){return round(SURFACE,12,Color.rgb(38,52,85),1);}
+    private GradientDrawable round(int color,int radius,int stroke,int width){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));if(width>0)d.setStroke(dp(width),stroke);return d;}
+    private LinearLayout.LayoutParams wrap(){return new LinearLayout.LayoutParams(-1,-2);}
+    private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);}
+    private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
+    @Override protected void onDestroy(){executor.shutdownNow();super.onDestroy();}
 }
