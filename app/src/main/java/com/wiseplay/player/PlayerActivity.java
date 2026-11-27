@@ -1,6 +1,7 @@
 package com.wiseplay.player;
 
 import android.content.pm.ActivityInfo;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
@@ -33,6 +34,7 @@ import androidx.media3.ui.TrackSelectionDialogBuilder;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
 
 @UnstableApi
@@ -45,6 +47,10 @@ public class PlayerActivity extends AppCompatActivity {
     private boolean fullscreen;
     private boolean retryingUnauthorized;
     private long lastUnauthorizedRetry;
+    private boolean dataSaver;
+    private ArrayList<Channel> channelList = new ArrayList<>();
+    private int channelIndex;
+    private SharedPreferences preferences;
     private TextView errorText;
 
     @Override
@@ -54,27 +60,47 @@ public class PlayerActivity extends AppCompatActivity {
         playerView = findViewById(R.id.playerView);
         errorText = findViewById(R.id.errorText);
         tokenManager = TokenManager.get(this);
+        preferences = getSharedPreferences("wiseplay_preferences", MODE_PRIVATE);
+        dataSaver = preferences.getBoolean("data_saver", false);
 
-        String url = getIntent().getStringExtra("url_video");
-        String name = getIntent().getStringExtra("channel_name");
-        String group = getIntent().getStringExtra("channel_group");
-        String image = getIntent().getStringExtra("channel_image");
-        String userAgent = getIntent().getStringExtra("channel_user_agent");
-        String referer = getIntent().getStringExtra("channel_referer");
-        boolean isHost = getIntent().getBooleanExtra("channel_host", false);
-        String licenseType = getIntent().getStringExtra("channel_license_type");
-        String licenseKey = getIntent().getStringExtra("channel_license_key");
-        channel = new Channel(name, url, group, image, userAgent, referer, isHost,
-                licenseType, licenseKey, readHeaders());
+        channel = (Channel) getIntent().getSerializableExtra("channel");
+        channelList = (ArrayList<Channel>) getIntent().getSerializableExtra("channel_list");
+        if (channelList == null) channelList = new ArrayList<>();
+        channelIndex = getIntent().getIntExtra("channel_index", 0);
+        if (channel == null) { finish(); return; }
         setTitle(channel.getName());
         ((TextView) findViewById(R.id.titleText)).setText(channel.getName());
 
         findViewById(R.id.backButton).setOnClickListener(v -> finish());
-        findViewById(R.id.fullscreenButton).setOnClickListener(v -> toggleFullscreen());
-        findViewById(R.id.audioButton).setOnClickListener(v -> showTrackDialog(C.TRACK_TYPE_AUDIO, "Pista de audio"));
-        findViewById(R.id.subtitleButton).setOnClickListener(v -> showTrackDialog(C.TRACK_TYPE_TEXT, "Subtítulos"));
-        findViewById(R.id.aspectButton).setOnClickListener(v -> cycleAspectRatio());
+        findViewById(R.id.fullscreenButton).setOnClickListener(v -> setFullscreen(!fullscreen));
+        findViewById(R.id.previousButton).setOnClickListener(v -> moveChannel(-1));
+        findViewById(R.id.nextButton).setOnClickListener(v -> moveChannel(1));
+        findViewById(R.id.saverButton).setOnClickListener(v -> {
+            dataSaver = !dataSaver;
+            preferences.edit().putBoolean("data_saver", dataSaver).apply();
+            updateSaverButton();
+            preparePlayer(true);
+        });
         findViewById(R.id.retryButton).setOnClickListener(v -> preparePlayer(true));
+        updateSaverButton();
+        setFullscreen(true);
+        preparePlayer(false);
+    }
+
+    private void updateSaverButton() {
+        ((Button) findViewById(R.id.saverButton)).setText(dataSaver ? "Ahorro: sí" : "Ahorro: no");
+    }
+
+    private void moveChannel(int direction) {
+        int target = channelIndex + direction;
+        if (target < 0 || target >= channelList.size()) {
+            Toast.makeText(this, direction < 0 ? "Primer canal" : "Último canal", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        channelIndex = target;
+        channel = channelList.get(channelIndex);
+        setTitle(channel.getName());
+        ((TextView) findViewById(R.id.titleText)).setText(channel.getName());
         preparePlayer(false);
     }
 
@@ -97,7 +123,10 @@ public class PlayerActivity extends AppCompatActivity {
         if (player != null) player.release();
         errorText.setVisibility(View.GONE);
         trackSelector = new DefaultTrackSelector(this);
-        trackSelector.setParameters(trackSelector.buildUponParameters().setMaxVideoSizeSd());
+        DefaultTrackSelector.Parameters.Builder trackParameters = trackSelector.buildUponParameters()
+                .setPreferredAudioLanguages("es", "spa");
+        if (dataSaver) trackParameters.setMaxVideoSizeSd().setMaxVideoBitrate(800_000);
+        trackSelector.setParameters(trackParameters);
 
         String token = tokenManager.getValidToken();
         String playbackUrl = TokenManager.appendToken(channel.getUrl(), token);
@@ -181,31 +210,8 @@ public class PlayerActivity extends AppCompatActivity {
         return false;
     }
 
-    private void showTrackDialog(int trackType, String title) {
-        if (player == null || player.getCurrentTracks().isEmpty()) {
-            Toast.makeText(this, "No hay pistas disponibles", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        new TrackSelectionDialogBuilder(this, title, player, trackType)
-                .setShowDisableOption(trackType == C.TRACK_TYPE_TEXT)
-                .build().show();
-    }
-
-    private void cycleAspectRatio() {
-        int current = playerView.getResizeMode();
-        int next = current == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
-                ? androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                : current == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                ? androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
-                : androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT;
-        playerView.setResizeMode(next);
-        String label = next == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT ? "Ajustar"
-                : next == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM ? "Zoom" : "Estirar";
-        Toast.makeText(this, "Relación: " + label, Toast.LENGTH_SHORT).show();
-    }
-
-    private void toggleFullscreen() {
-        fullscreen = !fullscreen;
+    private void setFullscreen(boolean enabled) {
+        fullscreen = enabled;
         Window window = getWindow();
         if (fullscreen) {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
