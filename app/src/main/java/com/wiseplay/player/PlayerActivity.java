@@ -38,6 +38,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @UnstableApi
 public class PlayerActivity extends AppCompatActivity {
@@ -57,6 +61,7 @@ public class PlayerActivity extends AppCompatActivity {
     private TextView qualityText;
     private View controlsOverlay;
     private final Handler controlsHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService redirectExecutor = Executors.newSingleThreadExecutor();
     private final Runnable hideControls = () -> {
         if (controlsOverlay != null) controlsOverlay.setVisibility(View.GONE);
     };
@@ -161,6 +166,53 @@ public class PlayerActivity extends AppCompatActivity {
             showError("El canal no tiene una URL válida");
             return;
         }
+        Channel requestedChannel = channel;
+        String sourceUrl = channel.getUrl();
+        redirectExecutor.execute(() -> {
+            try {
+                String resolvedUrl = resolveCencRedirect(sourceUrl, requestedChannel);
+                runOnUiThread(() -> {
+                    if (channel == requestedChannel) preparePlayerResolved(resolvedUrl, fromRetry);
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> showError("No se pudo obtener el enlace de reproducción: " + error.getMessage()));
+            }
+        });
+    }
+
+    private String resolveCencRedirect(String sourceUrl, Channel requestedChannel) throws Exception {
+        if (!sourceUrl.toLowerCase().contains("cenc")) return sourceUrl;
+        String current = sourceUrl;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            HttpURLConnection connection = (HttpURLConnection) new URL(current).openConnection();
+            connection.setInstanceFollowRedirects(false);
+            connection.setConnectTimeout(15_000);
+            connection.setReadTimeout(30_000);
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("User-Agent", requestedChannel.getUserAgent().isEmpty()
+                    ? "WiseplayPlayer/2.0" : requestedChannel.getUserAgent());
+            for (Map.Entry<String, String> header : requestedChannel.getHeaders().entrySet()) {
+                connection.setRequestProperty(header.getKey(), header.getValue());
+            }
+            if (!requestedChannel.getReferer().isEmpty()) {
+                connection.setRequestProperty("Referer", requestedChannel.getReferer());
+            }
+            int responseCode = connection.getResponseCode();
+            String location = connection.getHeaderField("Location");
+            connection.disconnect();
+            if (responseCode < 300 || responseCode >= 400 || location == null || location.isEmpty()) {
+                return current;
+            }
+            current = new URL(new URL(current), location).toString();
+        }
+        return current;
+    }
+
+    private void preparePlayerResolved(String playbackUrl, boolean fromRetry) {
+        if (channel.getUrl().isEmpty()) {
+            showError("El canal no tiene una URL válida");
+            return;
+        }
         if (player != null) player.release();
         errorText.setVisibility(View.GONE);
         trackSelector = new DefaultTrackSelector(this);
@@ -175,7 +227,7 @@ public class PlayerActivity extends AppCompatActivity {
         trackSelector.setParameters(trackParameters);
 
         String token = tokenManager.getValidToken();
-        String playbackUrl = TokenManager.appendToken(channel.getUrl(), token);
+        playbackUrl = TokenManager.appendToken(playbackUrl, token);
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true)
                 .setConnectTimeoutMs(15_000)
@@ -332,6 +384,7 @@ public class PlayerActivity extends AppCompatActivity {
 
     @Override protected void onDestroy() {
         controlsHandler.removeCallbacksAndMessages(null);
+        redirectExecutor.shutdownNow();
         if (player != null) player.release();
         super.onDestroy();
     }
