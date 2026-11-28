@@ -98,8 +98,40 @@ public final class PlaylistParser {
         if (stations == null) return;
         for (int i = 0; i < stations.length(); i++) {
             JSONObject station = stations.optJSONObject(i);
-            if (station != null) addStation(station, group, channels);
+            if (station == null) continue;
+            JSONArray options = station.optJSONArray("options");
+            if (options != null && options.length() > 0) {
+                for (int optionIndex = 0; optionIndex < options.length(); optionIndex++) {
+                    JSONObject option = options.optJSONObject(optionIndex);
+                    if (option == null) continue;
+                    addStation(mergeStationOption(station, option), group, channels);
+                }
+            } else {
+                addStation(station, group, channels);
+            }
         }
+    }
+
+    /**
+     * Algunas W3U agrupan varias fuentes del mismo canal dentro de
+     * stations[].options[]. La opción contiene la URL y sus metadatos, pero
+     * puede heredar la imagen o el nombre de la estación principal.
+     */
+    private static JSONObject mergeStationOption(JSONObject station, JSONObject option) throws JSONException {
+        JSONObject merged = new JSONObject(station.toString());
+        Iterator<String> keys = option.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            merged.put(key, option.get(key));
+        }
+        merged.remove("options");
+        if (merged.optString("name", "").trim().isEmpty()) {
+            merged.put("name", station.optString("name", "Canal"));
+        }
+        if (merged.optString("image", "").trim().isEmpty()) {
+            merged.put("image", station.optString("image", ""));
+        }
+        return merged;
     }
 
     private static void collectJsonChannels(Object value, String group, List<Channel> channels) throws JSONException {
