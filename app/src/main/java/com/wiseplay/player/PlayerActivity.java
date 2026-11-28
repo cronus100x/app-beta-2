@@ -181,6 +181,8 @@ public class PlayerActivity extends AppCompatActivity {
     }
 
     private String resolveCencRedirect(String sourceUrl, Channel requestedChannel) throws Exception {
+        String rewritten = FlowTokenManager.rewrite(sourceUrl);
+        if (!rewritten.equals(sourceUrl)) return rewritten;
         if (!sourceUrl.toLowerCase().contains("cenc")) return sourceUrl;
         String current = sourceUrl;
         for (int attempt = 0; attempt < 5; attempt++) {
@@ -281,6 +283,7 @@ public class PlayerActivity extends AppCompatActivity {
                         && System.currentTimeMillis() - lastUnauthorizedRetry > 3_000) {
                     retryingUnauthorized = true;
                     lastUnauthorizedRetry = System.currentTimeMillis();
+                    FlowTokenManager.invalidate();
                     tokenManager.renew();
                     Toast.makeText(PlayerActivity.this, "Sesión renovada, reintentando…", Toast.LENGTH_SHORT).show();
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
