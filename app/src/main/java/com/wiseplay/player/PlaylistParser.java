@@ -157,6 +157,12 @@ public final class PlaylistParser {
 
     private static void addStation(JSONObject station, String group, List<Channel> channels) {
         String url = firstString(station, "url", "stream_url", "streamUrl", "link", "src", "file", "url2", "url3");
+        String tokenSource = firstString(station, "token", "token_url", "tokenUrl");
+        // Algunas listas publican el manifiesto CENC en `token` y dejan
+        // `tok_{token}` como marcador en `url`. El endpoint CENC redirige
+        // al manifiesto ENC firmado con un token nuevo; Media3 seguirá esa
+        // redirección y renovará el enlace al preparar la reproducción.
+        if (url.contains("{token}") && isStreamUrl(tokenSource)) url = tokenSource;
         if (!isStreamUrl(url)) return;
         String name = firstString(station, "name", "title", "channel", "channel_name", "label");
         String stationGroup = firstString(station, "group", "group-title", "group_title", "category", "genre");
